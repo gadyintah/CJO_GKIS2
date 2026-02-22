@@ -1,6 +1,10 @@
 'use client';
 
+<<<<<<< HEAD
 import { useState, useEffect, useCallback } from 'react';
+=======
+import { useState, useEffect, useCallback, useRef } from 'react';
+>>>>>>> copilot/add-export-import-functionality
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -18,12 +22,48 @@ interface Member {
   created_at: string;
 }
 
+<<<<<<< HEAD
+=======
+interface ImportPreview {
+  name?: string;
+  card_no?: string;
+  status?: string;
+  membership_date?: string;
+  no_of_months?: string;
+  end_date?: string;
+  amount?: string;
+  mop?: string;
+  contact_no?: string;
+}
+
+interface ImportResult {
+  success: boolean;
+  created: number;
+  updated: number;
+  errors: { row: number; error: string }[];
+  total: number;
+  message: string;
+}
+
+>>>>>>> copilot/add-export-import-functionality
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
 
+<<<<<<< HEAD
+=======
+  // Import state
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview[] | null>(null);
+  const [importPreviewTotal, setImportPreviewTotal] = useState(0);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+>>>>>>> copilot/add-export-import-functionality
   const fetchMembers = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -44,6 +84,73 @@ export default function MembersPage() {
     return () => clearTimeout(timer);
   }, [fetchMembers]);
 
+<<<<<<< HEAD
+=======
+  const handleExport = () => {
+    window.open('/api/members/export', '_blank');
+  };
+
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError('');
+
+    // Fetch preview
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('preview', 'true');
+    try {
+      const res = await fetch('/api/members/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) {
+        setImportError(data.error);
+        return;
+      }
+      setImportPreview(data.preview);
+      setImportPreviewTotal(data.total);
+    } catch {
+      setImportError('Failed to read file. Please check the format.');
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/members/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) {
+        setImportError(data.error);
+        return;
+      }
+      setImportResult(data);
+      setImportPreview(null);
+      setImportFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      // Refresh members list
+      fetchMembers();
+    } catch {
+      setImportError('Import failed. Please try again.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportCancel = () => {
+    setImportFile(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+>>>>>>> copilot/add-export-import-functionality
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -51,6 +158,7 @@ export default function MembersPage() {
           <h1 className="text-3xl font-bold text-gray-800">Members</h1>
           <p className="text-gray-500 mt-1">{members.length} member{members.length !== 1 ? 's' : ''} found</p>
         </div>
+<<<<<<< HEAD
         <Link
           href="/admin/members/register"
           className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold px-6 py-3 rounded-lg transition-colors"
@@ -59,6 +167,136 @@ export default function MembersPage() {
         </Link>
       </div>
 
+=======
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors"
+            title="Export all member data to Excel"
+          >
+            <span>⬇️</span> Export Data
+          </button>
+          <label className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors cursor-pointer"
+            title="Import member data from Excel or CSV">
+            <span>⬆️</span> Import Data
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportFileChange}
+              className="hidden"
+            />
+          </label>
+          <Link
+            href="/admin/members/register"
+            className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold px-6 py-2.5 rounded-lg transition-colors"
+          >
+            + Register Member
+          </Link>
+        </div>
+      </div>
+
+      {/* Import Error */}
+      {importError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-start justify-between">
+          <span>⚠️ {importError}</span>
+          <button onClick={handleImportCancel} className="text-red-400 hover:text-red-600 ml-4">✕</button>
+        </div>
+      )}
+
+      {/* Import Result */}
+      {importResult && (
+        <div className={`mb-4 p-4 rounded-lg border ${importResult.errors.length > 0 ? 'bg-yellow-50 border-yellow-300' : 'bg-green-50 border-green-300'}`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-semibold text-gray-800">✅ Import Complete</p>
+              <p className="text-gray-600 mt-1">{importResult.message}</p>
+              {importResult.errors.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-orange-600 cursor-pointer font-medium text-sm">
+                    {importResult.errors.length} row(s) had errors — click to view
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {importResult.errors.map((e, i) => (
+                      <li key={i} className="text-sm text-red-700">Row {e.row}: {e.error}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+            <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600 ml-4">✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Import Preview */}
+      {importPreview && (
+        <div className="mb-6 bg-white rounded-xl shadow p-5 border border-orange-200">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">📋 Import Preview</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Showing first {importPreview.length} of {importPreviewTotal} row(s)</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleImportCancel}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImportConfirm}
+                disabled={importing}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg text-sm font-semibold"
+              >
+                {importing ? 'Importing...' : `Import ${importPreviewTotal} Row(s)`}
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left">
+                  <th className="px-3 py-2 font-semibold text-gray-600">Name</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Card No.</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Status</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Start Date</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">End Date</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Months</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Amount</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">MOP</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Contact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreview.map((row, i) => (
+                  <tr key={i} className={`border-t border-gray-100 ${i % 2 === 0 ? '' : 'bg-gray-50'}`}>
+                    <td className="px-3 py-2 font-medium text-gray-800">{row.name || '-'}</td>
+                    <td className="px-3 py-2 font-mono text-gray-600">{row.card_no || '-'}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        String(row.status || '').toLowerCase() === 'ongoing' || String(row.status || '').toLowerCase() === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {row.status || '-'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{row.membership_date || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.end_date || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.no_of_months || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.amount || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.mop || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.contact_no || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+>>>>>>> copilot/add-export-import-functionality
       {/* Filters */}
       <div className="bg-white rounded-xl shadow p-4 mb-6 flex flex-wrap gap-4 items-center">
         <input

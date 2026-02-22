@@ -83,7 +83,10 @@ export default function KioskPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center relative overflow-hidden">
+<<<<<<< HEAD
       {/* Background pattern */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
           backgroundImage: 'repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 0, transparent 50%)',
@@ -94,9 +97,13 @@ export default function KioskPage() {
       <ScannerInput onScan={handleScan} disabled={scanning} />
 
       {!scanResult ? (
+<<<<<<< HEAD
         /* Default idle screen */
         <div className="text-center z-10 animate-fadeIn">
           {/* Brand */}
+=======
+        <div className="text-center z-10 animate-fadeIn">
+>>>>>>> copilot/add-export-import-functionality
           <div className="mb-8">
             <h1 className="text-8xl font-black text-yellow-400 tracking-wider drop-shadow-2xl">
               CJO GYM
@@ -104,13 +111,19 @@ export default function KioskPage() {
             <div className="h-1 bg-yellow-400 rounded-full mt-2 mx-auto w-64" />
           </div>
 
+<<<<<<< HEAD
           {/* Clock */}
+=======
+>>>>>>> copilot/add-export-import-functionality
           <div className="mb-12">
             <p className="text-5xl font-mono font-bold text-white mb-2">{timeStr}</p>
             <p className="text-xl text-gray-400">{dateStr}</p>
           </div>
 
+<<<<<<< HEAD
           {/* Scan prompt */}
+=======
+>>>>>>> copilot/add-export-import-functionality
           <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700 max-w-md mx-auto">
             {scanning ? (
               <div className="text-center">
@@ -127,7 +140,10 @@ export default function KioskPage() {
           </div>
         </div>
       ) : (
+<<<<<<< HEAD
         /* Scan result screen */
+=======
+>>>>>>> copilot/add-export-import-functionality
         <div className="z-10 w-full max-w-2xl mx-auto px-4 animate-fadeIn">
           <div className={`rounded-2xl p-8 border-2 ${
             !scanResult.found 
@@ -139,16 +155,23 @@ export default function KioskPage() {
                 : 'bg-orange-950 border-orange-500'
           }`}>
             {!scanResult.found ? (
+<<<<<<< HEAD
               /* Card not found */
+=======
+>>>>>>> copilot/add-export-import-functionality
               <div className="text-center">
                 <div className="text-8xl mb-4">❌</div>
                 <h2 className="text-3xl font-bold text-red-400 mb-2">Card Not Found</h2>
                 <p className="text-xl text-gray-300">{scanResult.message}</p>
               </div>
             ) : (
+<<<<<<< HEAD
               /* Member found */
               <div className="flex gap-6 items-start">
                 {/* Photo */}
+=======
+              <div className="flex gap-6 items-start">
+>>>>>>> copilot/add-export-import-functionality
                 <div className="flex-shrink-0">
                   {scanResult.member?.image_path ? (
                     <div className="relative w-32 h-32 rounded-xl overflow-hidden border-4 border-yellow-400">
@@ -166,7 +189,10 @@ export default function KioskPage() {
                   )}
                 </div>
 
+<<<<<<< HEAD
                 {/* Info */}
+=======
+>>>>>>> copilot/add-export-import-functionality
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <h2 className="text-4xl font-black">
@@ -174,7 +200,10 @@ export default function KioskPage() {
                     </h2>
                   </div>
 
+<<<<<<< HEAD
                   {/* Check-in/out badge */}
+=======
+>>>>>>> copilot/add-export-import-functionality
                   <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold mb-4 ${
                     scanResult.action === 'CHECK_IN' 
                       ? 'bg-green-500 text-white' 
@@ -189,7 +218,10 @@ export default function KioskPage() {
                     </p>
                   )}
 
+<<<<<<< HEAD
                   {/* Membership status */}
+=======
+>>>>>>> copilot/add-export-import-functionality
                   {scanResult.has_active_membership ? (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -216,7 +248,10 @@ export default function KioskPage() {
               </div>
             )}
 
+<<<<<<< HEAD
             {/* Countdown */}
+=======
+>>>>>>> copilot/add-export-import-functionality
             <div className="mt-6 text-center">
               <p className="text-gray-400 text-sm">Returning to main screen in {countdown}s...</p>
               <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
@@ -228,12 +263,18 @@ export default function KioskPage() {
             </div>
           </div>
 
+<<<<<<< HEAD
           {/* Brand in result view */}
+=======
+>>>>>>> copilot/add-export-import-functionality
           <p className="text-center text-gray-600 mt-4 text-lg font-bold tracking-widest">CJO GYM</p>
         </div>
       )}
 
+<<<<<<< HEAD
       {/* Brand watermark when showing result */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       {!scanResult && (
         <div className="absolute bottom-6 text-gray-700 text-sm tracking-widest font-bold">
           FITNESS · STRENGTH · COMMUNITY

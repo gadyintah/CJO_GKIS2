@@ -55,6 +55,13 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
+<<<<<<< HEAD
+=======
+  const handleExport = () => {
+    window.open('/api/members/export', '_blank');
+  };
+
+>>>>>>> copilot/add-export-import-functionality
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-screen">
@@ -67,9 +74,31 @@ export default function DashboardPage() {
 
   return (
     <div className="p-8">
+<<<<<<< HEAD
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
         <p className="text-gray-500 mt-1">{new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+=======
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+          <p className="text-gray-500 mt-1">{new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <span>⬇️</span> Export Data
+          </button>
+          <Link
+            href="/admin/members"
+            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <span>⬆️</span> Import Data
+          </Link>
+        </div>
+>>>>>>> copilot/add-export-import-functionality
       </div>
 
       {/* Stats Cards */}

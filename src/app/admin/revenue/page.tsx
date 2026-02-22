@@ -54,7 +54,10 @@ export default function RevenuePage() {
         <p className="text-gray-500 mt-1">Financial overview</p>
       </div>
 
+<<<<<<< HEAD
       {/* Daily Summary */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-xl shadow p-6">
           <p className="text-sm text-gray-500">Total Today</p>
@@ -76,7 +79,10 @@ export default function RevenuePage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Monthly Breakdown Chart */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       {data.monthlyBreakdown.length > 0 && (
         <div className="bg-white rounded-xl shadow p-6 mb-8">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Monthly Membership Revenue</h2>
@@ -101,7 +107,10 @@ export default function RevenuePage() {
         </div>
       )}
 
+<<<<<<< HEAD
       {/* Payment Log */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-700">All Payments</h2>

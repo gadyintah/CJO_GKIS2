@@ -61,7 +61,10 @@ export default function ScanPage() {
 
       <ScannerInput onScan={handleScan} disabled={scanning} />
 
+<<<<<<< HEAD
       {/* Manual search */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6 mb-6">
         <h2 className="text-lg font-semibold text-yellow-800 mb-3">📡 Card Scanner</h2>
         <p className="text-yellow-700 text-sm mb-4">Scan a card with the RFID/barcode scanner, or type the UID manually:</p>
@@ -83,7 +86,10 @@ export default function ScanPage() {
         </form>
       </div>
 
+<<<<<<< HEAD
       {/* Result */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       {result && (
         <div className={`rounded-xl border-2 p-6 ${
           !result.found ? 'bg-red-50 border-red-300' : result.member?.membership_status ? 'bg-green-50 border-green-300' : 'bg-orange-50 border-orange-300'

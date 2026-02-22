@@ -68,7 +68,10 @@ export default function LogsPage() {
         <p className="text-gray-500 mt-1">Track member check-ins and check-outs</p>
       </div>
 
+<<<<<<< HEAD
       {/* Filters */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="bg-white rounded-xl shadow p-4 mb-6">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
@@ -102,7 +105,10 @@ export default function LogsPage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Summary */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="flex gap-4 mb-6">
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
           <span className="text-2xl">✅</span>
@@ -114,7 +120,10 @@ export default function LogsPage() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Table */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full">

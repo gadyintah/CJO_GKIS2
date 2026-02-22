@@ -70,7 +70,10 @@ export default function WalkinsPage() {
         <p className="text-gray-500 mt-1">Track daily walk-in visitors</p>
       </div>
 
+<<<<<<< HEAD
       {/* Stats */}
+=======
+>>>>>>> copilot/add-export-import-functionality
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
           { label: "Today's Walk-ins", count: data?.todayStats.count || 0, total: data?.todayStats.total || 0, color: 'bg-blue-500' },
@@ -89,7 +92,10 @@ export default function WalkinsPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+<<<<<<< HEAD
         {/* Register Form */}
+=======
+>>>>>>> copilot/add-export-import-functionality
         <div className="bg-white rounded-xl shadow p-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Register Walk-in</h2>
           {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
@@ -128,7 +134,10 @@ export default function WalkinsPage() {
           </form>
         </div>
 
+<<<<<<< HEAD
         {/* Walk-in Log */}
+=======
+>>>>>>> copilot/add-export-import-functionality
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div className="p-4 border-b border-gray-100">
             <h2 className="text-lg font-semibold text-gray-700">Walk-in Log</h2>
