@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { addMonths, toDateString } from '@/lib/dateUtils';
 import ExcelJS from 'exceljs';
 
 interface ImportedRow {
@@ -242,7 +243,30 @@ export async function POST(request: NextRequest) {
           const start_date = parseDate(row.membership_date) || null;
           const end_date = parseDate(row.end_date) || null;
           const months_purchased = row.no_of_months ? parseInt(String(row.no_of_months)) || null : null;
-          const memberStatus = parseStatus(row.status);
+
+          // If end_date is missing but start_date + months_purchased are known,
+          // calculate end_date so the membership is not stored with a NULL end_date
+          // (NULL end_date causes the membership JOIN condition to fail, making the
+          // member appear as "Expired/None" in the UI even when status is 'active').
+          let computedEndDate = end_date;
+          if (!computedEndDate && start_date && months_purchased && months_purchased > 0) {
+            const startObj = new Date(start_date + 'T00:00:00');
+            // Use addMonths for all cases — it handles 12, 24, or any number of months
+            // correctly, including cross-year rollovers and month-end clamping.
+            computedEndDate = toDateString(addMonths(startObj, months_purchased));
+          }
+
+          // Derive the definitive membership status from the (computed) end_date.
+          // This is more reliable than the spreadsheet's status text, which may be
+          // stale or use non-standard values.
+          let memberStatus: string;
+          if (computedEndDate) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            memberStatus = computedEndDate >= todayStr ? 'active' : 'expired';
+          } else {
+            // No date information available — fall back to the spreadsheet status text.
+            memberStatus = parseStatus(row.status);
+          }
           const amount = row.amount ? parseFloat(String(row.amount).replace(/[^0-9.]/g, '')) || null : null;
           const mop = String(row.mop || '').trim() || null;
           const now = new Date().toISOString();
@@ -279,7 +303,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Create membership if dates are present
-          if (start_date || end_date) {
+          if (start_date || computedEndDate) {
             // Expire previous active memberships
             db.prepare(`
               UPDATE memberships SET status = 'expired'
@@ -293,7 +317,7 @@ export async function POST(request: NextRequest) {
               member_id,
               months_purchased && months_purchased >= 12 ? 'yearly' : 'monthly',
               start_date,
-              end_date,
+              computedEndDate,
               months_purchased,
               memberStatus,
               now,
