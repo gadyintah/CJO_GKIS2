@@ -19,7 +19,7 @@ interface ImportedRow {
   [key: string]: unknown;
 }
 
-// Normalise a header string to a consistent key
+// Normalize a header string to a consistent key
 function normalizeHeader(raw: string): string {
   return raw.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '_')
@@ -100,9 +100,10 @@ function parseDate(value: unknown): string {
   // Try natural language dates (e.g. "January 12, 2026")
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const mo = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
+    // Use UTC values to avoid timezone shift for date-only strings
+    const y = parsed.getUTCFullYear();
+    const mo = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getUTCDate()).padStart(2, '0');
     return `${y}-${mo}-${d}`;
   }
 

@@ -98,7 +98,7 @@ export default function RenewMembershipPage() {
       const lastDay = new Date(endYear, m, 0).getDate();
       return `${endYear}-${String(m).padStart(2, '0')}-${String(Math.min(d, lastDay)).padStart(2, '0')}`;
     }
-    const targetMonth = m; // 1-indexed month + 1 = next month (0-indexed: m - 1 + 1 = m)
+    const targetMonth = m + 1; // next month (1-indexed)
     const lastDay = new Date(y, targetMonth, 0).getDate();
     const endM = targetMonth > 12 ? 1 : targetMonth;
     const endY = targetMonth > 12 ? y + 1 : y;
