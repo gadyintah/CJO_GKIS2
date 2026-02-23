@@ -409,6 +409,9 @@ export async function POST(request: NextRequest) {
         }
       }
       await tx.commit();
+    } catch (commitError) {
+      try { tx.rollback(); } catch { /* ignore rollback errors */ }
+      throw commitError;
     } finally {
       tx.close();
     }
