@@ -16,6 +16,7 @@ interface ImportedRow {
   address?: string;
   birthdate?: string;
   emergency_contact?: string;
+  emergency_contact_number?: string;
   card_status?: string;
   [key: string]: unknown;
 }
@@ -62,6 +63,9 @@ const COLUMN_MAP: Record<string, keyof ImportedRow> = {
   birthday: 'birthdate',
   emergency_contact: 'emergency_contact',
   emergency: 'emergency_contact',
+  emergency_contact_number: 'emergency_contact_number',
+  emergency_number: 'emergency_contact_number',
+  emergency_phone: 'emergency_contact_number',
   card_status: 'card_status',
 };
 
@@ -283,13 +287,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Perform actual import
-    const db = getDb();
+    const db = await getDb();
     let created = 0;
     let updated = 0;
     const errors: { row: number; error: string }[] = [];
 
-    const importTx = db.transaction(() => {
-      importedRows.forEach((row, index) => {
+    const tx = await db.transaction('write');
+    try {
+      for (let index = 0; index < importedRows.length; index++) {
+        const row = importedRows[index];
         try {
           const { first_name, last_name } = splitName(String(row.name || ''));
           if (!first_name) throw new Error('Name is required');
@@ -299,6 +305,7 @@ export async function POST(request: NextRequest) {
           const address = String(row.address || '').trim() || null;
           const birthdate = parseDate(row.birthdate) || null;
           const emergency_contact = String(row.emergency_contact || '').trim() || null;
+          const emergency_contact_number = String(row.emergency_contact_number || '').trim() || null;
           const start_date = parseDate(row.membership_date) || null;
           const end_date = parseDate(row.end_date) || null;
           const months_purchased = row.no_of_months ? parseInt(String(row.no_of_months)) || null : null;
@@ -326,30 +333,34 @@ export async function POST(request: NextRequest) {
           // Check for existing member by custom_card_id
           let existingMember: { member_id: number } | null = null;
           if (custom_card_id) {
-            existingMember = db.prepare(`
-              SELECT member_id FROM members WHERE custom_card_id = ? LIMIT 1
-            `).get(custom_card_id) as { member_id: number } | null;
+            const existingResult = (await tx.execute({
+              sql: `SELECT member_id FROM members WHERE custom_card_id = ? LIMIT 1`,
+              args: [custom_card_id],
+            })).rows[0] as unknown as { member_id: number } | undefined;
+            existingMember = existingResult || null;
           }
 
           let member_id: number;
 
           if (existingMember) {
             // Update existing member
-            db.prepare(`
-              UPDATE members SET
+            await tx.execute({
+              sql: `UPDATE members SET
                 first_name = ?, last_name = ?, contact_no = ?,
-                address = ?, birthdate = ?, emergency_contact = ?
-              WHERE member_id = ?
-            `).run(first_name, last_name, contact_no, address, birthdate, emergency_contact, existingMember.member_id);
+                address = ?, birthdate = ?, emergency_contact = ?, emergency_contact_number = ?
+              WHERE member_id = ?`,
+              args: [first_name, last_name, contact_no, address, birthdate, emergency_contact, emergency_contact_number, existingMember.member_id],
+            });
             member_id = existingMember.member_id;
             updated++;
           } else {
             // Create new member
-            const result = db.prepare(`
-              INSERT INTO members (first_name, last_name, contact_no, address, birthdate,
-                emergency_contact, custom_card_id, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(first_name, last_name, contact_no, address, birthdate, emergency_contact, custom_card_id, now);
+            const result = await tx.execute({
+              sql: `INSERT INTO members (first_name, last_name, contact_no, address, birthdate,
+                emergency_contact, emergency_contact_number, custom_card_id, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              args: [first_name, last_name, contact_no, address, birthdate, emergency_contact, emergency_contact_number, custom_card_id, now],
+            });
             member_id = Number(result.lastInsertRowid);
             created++;
           }
@@ -357,46 +368,50 @@ export async function POST(request: NextRequest) {
           // Create membership if dates are present
           if (start_date || computedEndDate) {
             // Expire previous active memberships
-            db.prepare(`
-              UPDATE memberships SET status = 'expired'
-              WHERE member_id = ? AND status = 'active'
-            `).run(member_id);
+            await tx.execute({
+              sql: `UPDATE memberships SET status = 'expired'
+              WHERE member_id = ? AND status = 'active'`,
+              args: [member_id],
+            });
 
-            const membershipResult = db.prepare(`
-              INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              member_id,
-              months_purchased && months_purchased >= 12 ? 'yearly' : 'monthly',
-              start_date,
-              computedEndDate,
-              months_purchased,
-              memberStatus,
-              now,
-            );
+            const membershipResult = await tx.execute({
+              sql: `INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              args: [
+                member_id,
+                months_purchased && months_purchased >= 12 ? 'yearly' : 'monthly',
+                start_date,
+                computedEndDate,
+                months_purchased,
+                memberStatus,
+                now,
+              ],
+            });
 
             // Create payment if amount provided
             if (amount) {
-              db.prepare(`
-                INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-              `).run(
-                member_id,
-                membershipResult.lastInsertRowid,
-                amount,
-                mop,
-                start_date || now.split('T')[0],
-                'Imported from spreadsheet',
-              );
+              await tx.execute({
+                sql: `INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?)`,
+                args: [
+                  member_id,
+                  Number(membershipResult.lastInsertRowid),
+                  amount,
+                  mop,
+                  start_date || now.split('T')[0],
+                  'Imported from spreadsheet',
+                ],
+              });
             }
           }
         } catch (err) {
           errors.push({ row: index + 2, error: err instanceof Error ? err.message : 'Unknown error' });
         }
-      });
-    });
-
-    importTx();
+      }
+      await tx.commit();
+    } finally {
+      tx.close();
+    }
 
     return NextResponse.json({
       success: true,

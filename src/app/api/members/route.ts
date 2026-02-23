@@ -1,42 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { addMonths, addYears, toDateString } from '@/lib/dateUtils';
+import { InValue } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.max(1, Math.min(500, parseInt(searchParams.get('limit') || '100')));
+    const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT m.*, 
-        ms.plan_type, ms.status as membership_status, ms.start_date, ms.end_date,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
+    let whereClause = '';
+    const params: InValue[] = [];
+
+    if (search) {
+      whereClause += ` WHERE (m.first_name LIKE ? OR m.last_name LIKE ? OR m.card_uid LIKE ? OR m.custom_card_id LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (status === 'active') {
+      whereClause += search ? ' AND' : ' WHERE';
+      whereClause += ` ms.membership_id IS NOT NULL`;
+    } else if (status === 'expired') {
+      whereClause += search ? ' AND' : ' WHERE';
+      whereClause += ` ms.membership_id IS NULL`;
+    }
+
+    const baseFrom = `
       FROM members m
       LEFT JOIN memberships ms ON m.member_id = ms.member_id 
         AND ms.status = 'active'
         AND ms.end_date >= date('now')
     `;
-    const params: string[] = [];
 
-    if (search) {
-      query += ` WHERE (m.first_name LIKE ? OR m.last_name LIKE ? OR m.card_uid LIKE ? OR m.custom_card_id LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-    }
+    const countResult = (await db.execute({
+      sql: `SELECT COUNT(*) as count` + baseFrom + whereClause,
+      args: params,
+    })).rows[0] as unknown as { count: number };
+    const totalCount = countResult.count;
+    const totalPages = Math.ceil(totalCount / limit);
 
-    if (status === 'active') {
-      query += search ? ' AND' : ' WHERE';
-      query += ` ms.membership_id IS NOT NULL`;
-    } else if (status === 'expired') {
-      query += search ? ' AND' : ' WHERE';
-      query += ` ms.membership_id IS NULL`;
-    }
+    const members = (await db.execute({
+      sql: `SELECT m.*, 
+        ms.plan_type, ms.status as membership_status, ms.start_date, ms.end_date,
+        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining` + baseFrom + whereClause + ` ORDER BY m.created_at DESC LIMIT ? OFFSET ?`,
+      args: [...params, limit, offset],
+    })).rows;
 
-    query += ' ORDER BY m.created_at DESC';
-
-    const members = db.prepare(query).all(...params);
-    return NextResponse.json({ members });
+    return NextResponse.json({ members, totalCount, page, totalPages });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to fetch members' }, { status: 500 });
@@ -45,11 +59,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const body = await request.json();
     const {
       first_name, last_name, contact_no, address, birthdate,
-      emergency_contact, card_uid, custom_card_id, image_path,
+      emergency_contact, emergency_contact_number, card_uid, custom_card_id, image_path,
       plan_type, start_date, amount, mop, notes
     } = body;
 
@@ -69,27 +83,30 @@ export async function POST(request: NextRequest) {
     const end_date = toDateString(end);
     const start_date_str = toDateString(start);
 
-    const memberResult = db.prepare(`
-      INSERT INTO members (first_name, last_name, contact_no, address, birthdate, 
-        emergency_contact, card_uid, custom_card_id, image_path, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(first_name, last_name, contact_no, address, birthdate,
-           emergency_contact, card_uid, custom_card_id, image_path, notes, now);
+    const memberResult = await db.execute({
+      sql: `INSERT INTO members (first_name, last_name, contact_no, address, birthdate, 
+        emergency_contact, emergency_contact_number, card_uid, custom_card_id, image_path, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [first_name, last_name, contact_no, address, birthdate,
+             emergency_contact, emergency_contact_number, card_uid, custom_card_id, image_path, notes, now],
+    });
 
-    const member_id = memberResult.lastInsertRowid;
+    const member_id = Number(memberResult.lastInsertRowid);
 
-    const membershipResult = db.prepare(`
-      INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', ?)
-    `).run(member_id, plan_type, start_date_str, end_date, months_purchased, now);
+    const membershipResult = await db.execute({
+      sql: `INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+      args: [member_id, plan_type, start_date_str, end_date, months_purchased, now],
+    });
 
-    const membership_id = membershipResult.lastInsertRowid;
+    const membership_id = Number(membershipResult.lastInsertRowid);
 
     if (amount) {
-      db.prepare(`
-        INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(member_id, membership_id, amount, mop, now.split('T')[0], 'Initial registration');
+      await db.execute({
+        sql: `INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [member_id, membership_id, amount, mop, now.split('T')[0], 'Initial registration'],
+      });
     }
 
     return NextResponse.json({ 

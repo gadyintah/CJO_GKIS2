@@ -6,16 +6,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { id } = await params;
     const body = await request.json();
     const { amount, mop, payment_date, notes } = body;
 
-    db.prepare(`
-      UPDATE payments SET
+    await db.execute({
+      sql: `UPDATE payments SET
         amount = ?, mop = ?, payment_date = ?, notes = ?
-      WHERE payment_id = ?
-    `).run(amount, mop, payment_date, notes, id);
+      WHERE payment_id = ?`,
+      args: [amount, mop, payment_date, notes, id],
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

@@ -12,6 +12,7 @@ interface ExportRow {
   address: string;
   birthdate: string;
   emergency_contact: string;
+  emergency_contact_number: string;
   plan_type: string;
   membership_status: string;
   start_date: string;
@@ -42,10 +43,10 @@ function deriveCardStatus(row: ExportRow): string {
 
 export async function GET() {
   try {
-    const db = getDb();
+    const db = await getDb();
 
-    const rows = db.prepare(`
-      SELECT 
+    const rows = (await db.execute({
+      sql: `SELECT 
         m.member_id,
         m.first_name,
         m.last_name,
@@ -55,6 +56,7 @@ export async function GET() {
         m.address,
         m.birthdate,
         m.emergency_contact,
+        m.emergency_contact_number,
         ms.plan_type,
         ms.status as membership_status,
         ms.start_date,
@@ -75,8 +77,9 @@ export async function GET() {
         WHERE member_id = m.member_id
         ORDER BY payment_date DESC LIMIT 1
       )
-      ORDER BY m.member_id ASC
-    `).all() as ExportRow[];
+      ORDER BY m.member_id ASC`,
+      args: [],
+    })).rows as unknown as ExportRow[];
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';
@@ -100,6 +103,7 @@ export async function GET() {
       { header: 'Birthdate', key: 'birthdate', width: 14 },
       { header: 'Age', key: 'age', width: 6 },
       { header: 'Emergency Contact', key: 'emergency_contact', width: 28 },
+      { header: 'Emergency Contact No.', key: 'emergency_contact_number', width: 20 },
     ];
 
     const headerRow = sheet.getRow(1);
@@ -136,6 +140,7 @@ export async function GET() {
         birthdate: row.birthdate || '',
         age: calcAge(row.birthdate),
         emergency_contact: row.emergency_contact || '',
+        emergency_contact_number: row.emergency_contact_number || '',
       });
 
       let rowFill: ExcelJS.Fill | undefined;

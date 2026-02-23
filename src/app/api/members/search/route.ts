@@ -3,12 +3,12 @@ import { getDb } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || '';
 
-    const members = db.prepare(`
-      SELECT m.*,
+    const members = (await db.execute({
+      sql: `SELECT m.*,
         ms.plan_type, ms.status as membership_status, ms.end_date,
         CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
       FROM members m
@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
       WHERE m.first_name LIKE ? OR m.last_name LIKE ? 
         OR m.card_uid LIKE ? OR m.custom_card_id LIKE ?
       ORDER BY m.first_name
-      LIMIT 20
-    `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+      LIMIT 20`,
+      args: [`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`],
+    })).rows;
 
     return NextResponse.json({ members });
   } catch (error) {

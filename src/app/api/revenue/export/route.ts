@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import ExcelJS from 'exceljs';
+import { InValue } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || '';
 
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN members m ON p.member_id = m.member_id
       LEFT JOIN memberships ms ON p.membership_id = ms.membership_id
     `;
-    const paymentsParams: string[] = [];
+    const paymentsParams: InValue[] = [];
 
     if (month) {
       paymentsQuery += ` WHERE strftime('%Y-%m', p.payment_date) = ?`;
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     }
     paymentsQuery += ` ORDER BY p.payment_date DESC`;
 
-    const payments = db.prepare(paymentsQuery).all(...paymentsParams) as {
+    const payments = (await db.execute({ sql: paymentsQuery, args: paymentsParams })).rows as unknown as {
       payment_id: number;
       member_id: number;
       first_name: string;
@@ -35,14 +36,14 @@ export async function GET(request: NextRequest) {
     }[];
 
     let walkinsQuery = `SELECT * FROM walkins`;
-    const walkinsParams: string[] = [];
+    const walkinsParams: InValue[] = [];
     if (month) {
       walkinsQuery += ` WHERE strftime('%Y-%m', payment_date) = ?`;
       walkinsParams.push(month);
     }
     walkinsQuery += ` ORDER BY payment_date DESC`;
 
-    const walkins = db.prepare(walkinsQuery).all(...walkinsParams) as {
+    const walkins = (await db.execute({ sql: walkinsQuery, args: walkinsParams })).rows as unknown as {
       walkin_id: number;
       guest_name: string;
       amount_paid: number;

@@ -6,17 +6,18 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { id } = await params;
     const body = await request.json();
     const { plan_type, start_date, end_date, months_purchased, status } = body;
 
-    db.prepare(`
-      UPDATE memberships SET
+    await db.execute({
+      sql: `UPDATE memberships SET
         plan_type = ?, start_date = ?, end_date = ?,
         months_purchased = ?, status = ?
-      WHERE membership_id = ?
-    `).run(plan_type, start_date, end_date, months_purchased, status, id);
+      WHERE membership_id = ?`,
+      args: [plan_type, start_date, end_date, months_purchased, status, id],
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
