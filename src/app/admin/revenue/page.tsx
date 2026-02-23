@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface RevenueData {
   dailyRevenue: { membership_revenue: number; payment_count: number };
@@ -17,6 +17,9 @@ interface RevenueData {
     notes: string;
     plan_type: string;
   }[];
+  totalCount: number;
+  page: number;
+  totalPages: number;
   monthlyBreakdown: { month: string; total: number }[];
 }
 
@@ -26,20 +29,50 @@ export default function RevenuePage() {
   const today = new Date().toISOString().split('T')[0];
   const month = today.slice(0, 7);
 
+  const [filters, setFilters] = useState({
+    from_date: '',
+    to_date: '',
+    plan_type: '',
+    mop: '',
+    search: '',
+  });
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set('date', today);
+      params.set('month', month);
+      params.set('page', page.toString());
+      params.set('limit', '100');
+      if (filters.search) params.set('search', filters.search);
+      if (filters.from_date) params.set('from_date', filters.from_date);
+      if (filters.to_date) params.set('to_date', filters.to_date);
+      if (filters.plan_type) params.set('plan_type', filters.plan_type);
+      if (filters.mop) params.set('mop', filters.mop);
+
+      const res = await fetch(`/api/revenue?${params}`);
+      const json = await res.json();
+      setData(json);
+      setTotalCount(json.totalCount || 0);
+      setTotalPages(json.totalPages || 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [today, month, filters, page]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch(`/api/revenue?date=${today}&month=${month}`);
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [today, month]);
+    setPage(1);
+  }, [filters]);
+
+  useEffect(() => {
+    const timer = setTimeout(fetchData, 300);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
 
   const handleExport = () => {
     window.open(`/api/revenue/export?month=${month}`, '_blank');
@@ -125,10 +158,64 @@ export default function RevenuePage() {
         </div>
       )}
 
+      <div className="bg-white rounded-xl shadow p-4 mb-4">
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="flex-1 min-w-48">
+            <label className="block text-xs text-gray-500 mb-1">Search Member</label>
+            <input
+              type="text"
+              placeholder="Search by name..."
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">From Date</label>
+            <input type="date" value={filters.from_date}
+              onChange={(e) => setFilters(prev => ({ ...prev, from_date: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">To Date</label>
+            <input type="date" value={filters.to_date}
+              onChange={(e) => setFilters(prev => ({ ...prev, to_date: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Plan Type</label>
+            <select value={filters.plan_type}
+              onChange={(e) => setFilters(prev => ({ ...prev, plan_type: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400">
+              <option value="">All Plans</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Payment Method</label>
+            <select value={filters.mop}
+              onChange={(e) => setFilters(prev => ({ ...prev, mop: e.target.value }))}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400">
+              <option value="">All Methods</option>
+              <option value="Cash">Cash</option>
+              <option value="GCash">GCash</option>
+              <option value="Maya">Maya</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <button onClick={() => setFilters({ from_date: '', to_date: '', plan_type: '', mop: '', search: '' })}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm">
+            Reset
+          </button>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-700">All Payments</h2>
-          <span className="text-sm text-gray-400">{data.payments.length} records</span>
+          <span className="text-sm text-gray-400">{totalCount} records</span>
         </div>
         <div className="overflow-auto max-h-96">
           <table className="w-full">
@@ -160,6 +247,47 @@ export default function RevenuePage() {
           </table>
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            ← Prev
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+            .reduce<(number | string)[]>((acc, p, i, arr) => {
+              if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, i) =>
+              typeof p === 'string' ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-gray-400">...</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                    page === p ? 'bg-yellow-500 text-gray-900' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ interface MemberData {
     address: string;
     birthdate: string;
     emergency_contact: string;
+    emergency_contact_number: string;
     card_uid: string;
     custom_card_id: string;
     image_path: string;
@@ -271,8 +272,11 @@ export default function MemberDetailPage() {
           {/* Emergency Contact Card */}
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-semibold text-gray-700 mb-3">🚨 Emergency Contact</h3>
-            {member.emergency_contact ? (
-              <p className="text-gray-800">{member.emergency_contact}</p>
+            {(member.emergency_contact || member.emergency_contact_number) ? (
+              <div className="space-y-1">
+                {member.emergency_contact && <p className="text-gray-800">{member.emergency_contact}</p>}
+                {member.emergency_contact_number && <p className="text-gray-600">📞 {member.emergency_contact_number}</p>}
+              </div>
             ) : (
               <p className="text-gray-400 italic">No emergency contact provided</p>
             )}
