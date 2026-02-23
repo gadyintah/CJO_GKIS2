@@ -56,17 +56,17 @@ export async function PUT(
     const body = await request.json();
     const {
       first_name, last_name, contact_no, address, birthdate,
-      emergency_contact, card_uid, custom_card_id, image_path
+      emergency_contact, card_uid, custom_card_id, image_path, notes
     } = body;
 
     db.prepare(`
       UPDATE members SET
         first_name = ?, last_name = ?, contact_no = ?, address = ?,
         birthdate = ?, emergency_contact = ?, card_uid = ?, 
-        custom_card_id = ?, image_path = ?
+        custom_card_id = ?, image_path = ?, notes = ?
       WHERE member_id = ?
     `).run(first_name, last_name, contact_no, address, birthdate,
-           emergency_contact, card_uid, custom_card_id, image_path, id);
+           emergency_contact, card_uid, custom_card_id, image_path, notes, id);
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

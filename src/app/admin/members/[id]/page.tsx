@@ -17,6 +17,7 @@ interface MemberData {
     card_uid: string;
     custom_card_id: string;
     image_path: string;
+    notes: string;
     created_at: string;
     plan_type: string;
     membership_status: string;
@@ -163,6 +164,11 @@ export default function MemberDetailPage() {
   const { member, memberships, payments, logs } = data;
   const isActive = !!member.membership_status;
 
+  // Determine "Member Since" from the earliest membership start_date
+  const earliestStartDate = memberships.length > 0
+    ? memberships.map(ms => ms.start_date).filter(Boolean).sort()[0] || member.created_at?.split('T')[0]
+    : member.created_at?.split('T')[0];
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       {/* Header */}
@@ -236,30 +242,49 @@ export default function MemberDetailPage() {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="bg-white rounded-xl shadow p-6 grid grid-cols-2 gap-6">
-          <div>
-            <h3 className="font-semibold text-gray-700 mb-3">Personal Information</h3>
-            <dl className="space-y-2">
-              <div><dt className="text-sm text-gray-500">Full Name</dt><dd className="font-medium">{member.first_name} {member.last_name}</dd></div>
-              <div><dt className="text-sm text-gray-500">Contact</dt><dd>{member.contact_no || '-'}</dd></div>
-              <div><dt className="text-sm text-gray-500">Birthdate</dt><dd>{member.birthdate || '-'}</dd></div>
-              <div><dt className="text-sm text-gray-500">Address</dt><dd>{member.address || '-'}</dd></div>
-              <div><dt className="text-sm text-gray-500">Emergency Contact</dt><dd>{member.emergency_contact || '-'}</dd></div>
-            </dl>
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow p-6 grid grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-3">Personal Information</h3>
+              <dl className="space-y-2">
+                <div><dt className="text-sm text-gray-500">Full Name</dt><dd className="font-medium">{member.first_name} {member.last_name}</dd></div>
+                <div><dt className="text-sm text-gray-500">Contact</dt><dd>{member.contact_no || '-'}</dd></div>
+                <div><dt className="text-sm text-gray-500">Birthdate</dt><dd>{member.birthdate || '-'}</dd></div>
+                <div><dt className="text-sm text-gray-500">Address</dt><dd>{member.address || '-'}</dd></div>
+              </dl>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-700 mb-3">Membership Summary</h3>
+              <dl className="space-y-2">
+                <div><dt className="text-sm text-gray-500">Status</dt><dd className={`font-bold ${isActive ? 'text-green-600' : 'text-red-600'}`}>{isActive ? 'Active' : 'Expired/None'}</dd></div>
+                {isActive && <>
+                  <div><dt className="text-sm text-gray-500">Plan</dt><dd className="capitalize font-medium">{member.plan_type}</dd></div>
+                  <div><dt className="text-sm text-gray-500">Start Date</dt><dd>{member.start_date}</dd></div>
+                  <div><dt className="text-sm text-gray-500">End Date</dt><dd>{member.end_date}</dd></div>
+                  <div><dt className="text-sm text-gray-500">Days Remaining</dt><dd className="font-bold">{member.days_remaining}</dd></div>
+                </>}
+                <div><dt className="text-sm text-gray-500">Member Since</dt><dd>{earliestStartDate || '-'}</dd></div>
+              </dl>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-700 mb-3">Membership Summary</h3>
-            <dl className="space-y-2">
-              <div><dt className="text-sm text-gray-500">Status</dt><dd className={`font-bold ${isActive ? 'text-green-600' : 'text-red-600'}`}>{isActive ? 'Active' : 'Expired/None'}</dd></div>
-              {isActive && <>
-                <div><dt className="text-sm text-gray-500">Plan</dt><dd className="capitalize font-medium">{member.plan_type}</dd></div>
-                <div><dt className="text-sm text-gray-500">Start Date</dt><dd>{member.start_date}</dd></div>
-                <div><dt className="text-sm text-gray-500">End Date</dt><dd>{member.end_date}</dd></div>
-                <div><dt className="text-sm text-gray-500">Days Remaining</dt><dd className="font-bold">{member.days_remaining}</dd></div>
-              </>}
-              <div><dt className="text-sm text-gray-500">Member Since</dt><dd>{member.created_at?.split('T')[0]}</dd></div>
-            </dl>
+
+          {/* Emergency Contact Card */}
+          <div className="bg-white rounded-xl shadow p-6">
+            <h3 className="font-semibold text-gray-700 mb-3">🚨 Emergency Contact</h3>
+            {member.emergency_contact ? (
+              <p className="text-gray-800">{member.emergency_contact}</p>
+            ) : (
+              <p className="text-gray-400 italic">No emergency contact provided</p>
+            )}
           </div>
+
+          {/* Notes Card */}
+          {member.notes && (
+            <div className="bg-white rounded-xl shadow p-6">
+              <h3 className="font-semibold text-gray-700 mb-3">📝 Notes</h3>
+              <p className="text-gray-800 whitespace-pre-wrap">{member.notes}</p>
+            </div>
+          )}
         </div>
       )}
 

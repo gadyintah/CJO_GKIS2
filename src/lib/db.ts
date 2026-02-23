@@ -35,6 +35,7 @@ function initializeSchema(db: Database.Database): void {
       card_uid TEXT UNIQUE,
       custom_card_id TEXT,
       image_path TEXT,
+      notes TEXT,
       created_at TEXT
     );
 
@@ -87,4 +88,10 @@ function initializeSchema(db: Database.Database): void {
       notes TEXT
     );
   `);
+
+  // Migration: add notes column to members if it doesn't exist yet
+  const cols = db.prepare(`PRAGMA table_info(members)`).all() as { name: string }[];
+  if (!cols.some(c => c.name === 'notes')) {
+    db.exec(`ALTER TABLE members ADD COLUMN notes TEXT`);
+  }
 }

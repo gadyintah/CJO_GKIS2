@@ -9,39 +9,82 @@ export async function POST(request: NextRequest) {
     const { member_id, plan_type, start_date, amount, mop } = body;
 
     const now = new Date().toISOString();
+    const todayStr = now.split('T')[0];
 
-    // Expire old active memberships
-    db.prepare(`
-      UPDATE memberships SET status = 'expired'
-      WHERE member_id = ? AND status = 'active'
-    `).run(member_id);
-
-    // Calculate end_date
-    const start = new Date(start_date || new Date());
-    let end: Date;
+    // Calculate months and end offset
     let months_purchased = 1;
     if (plan_type === 'yearly') {
-      end = addYears(start, 1);
       months_purchased = 12;
-    } else {
-      end = addMonths(start, 1);
-      months_purchased = 1;
     }
-    const end_date = toDateString(end);
-    const start_date_str = toDateString(start);
 
-    const membershipResult = db.prepare(`
-      INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', ?)
-    `).run(member_id, plan_type, start_date_str, end_date, months_purchased, now);
+    // Check for current active membership that has not yet expired
+    const activeMembership = db.prepare(`
+      SELECT * FROM memberships
+      WHERE member_id = ? AND status = 'active' AND end_date >= ?
+      ORDER BY end_date DESC LIMIT 1
+    `).get(member_id, todayStr) as { membership_id: number; end_date: string; months_purchased: number; plan_type: string } | undefined;
 
-    const membership_id = membershipResult.lastInsertRowid;
+    let membership_id: number | bigint;
 
-    if (amount) {
+    if (activeMembership) {
+      // Renewed before expiring — extend the current membership
+      const currentEnd = new Date(activeMembership.end_date + 'T00:00:00');
+      let newEnd: Date;
+      if (plan_type === 'yearly') {
+        newEnd = addYears(currentEnd, 1);
+      } else {
+        newEnd = addMonths(currentEnd, 1);
+      }
+      const new_end_date = toDateString(newEnd);
+      const new_months = (activeMembership.months_purchased || 0) + months_purchased;
+
       db.prepare(`
-        INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(member_id, membership_id, amount, mop, now.split('T')[0], 'Membership renewal');
+        UPDATE memberships SET
+          end_date = ?, months_purchased = ?, plan_type = ?
+        WHERE membership_id = ?
+      `).run(new_end_date, new_months, plan_type, activeMembership.membership_id);
+
+      membership_id = activeMembership.membership_id;
+
+      // Record payment with note about extension
+      if (amount) {
+        db.prepare(`
+          INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(member_id, membership_id, amount, mop, todayStr,
+          `Membership extended — end date changed to ${new_end_date}`);
+      }
+    } else {
+      // There is a gap or no active membership — create new membership record
+      // Expire any old active memberships
+      db.prepare(`
+        UPDATE memberships SET status = 'expired'
+        WHERE member_id = ? AND status = 'active'
+      `).run(member_id);
+
+      const start = new Date(start_date || new Date());
+      let end: Date;
+      if (plan_type === 'yearly') {
+        end = addYears(start, 1);
+      } else {
+        end = addMonths(start, 1);
+      }
+      const end_date = toDateString(end);
+      const start_date_str = toDateString(start);
+
+      const membershipResult = db.prepare(`
+        INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
+        VALUES (?, ?, ?, ?, ?, 'active', ?)
+      `).run(member_id, plan_type, start_date_str, end_date, months_purchased, now);
+
+      membership_id = membershipResult.lastInsertRowid;
+
+      if (amount) {
+        db.prepare(`
+          INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(member_id, membership_id, amount, mop, todayStr, 'Membership renewal');
+      }
     }
 
     return NextResponse.json({ success: true, membership_id });

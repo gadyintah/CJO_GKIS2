@@ -19,6 +19,7 @@ export default function RegisterMemberPage() {
     start_date: new Date().toISOString().split('T')[0],
     amount: '',
     mop: 'Cash',
+    notes: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -202,6 +203,17 @@ export default function RegisterMemberPage() {
                 value={formData.emergency_contact}
                 onChange={handleChange}
                 placeholder="Name - Relationship - Contact number"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes / Comments</label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                rows={3}
+                placeholder="Any additional notes about this member..."
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400"
               />
             </div>

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const {
       first_name, last_name, contact_no, address, birthdate,
       emergency_contact, card_uid, custom_card_id, image_path,
-      plan_type, start_date, amount, mop
+      plan_type, start_date, amount, mop, notes
     } = body;
 
     const now = new Date().toISOString();
@@ -71,10 +71,10 @@ export async function POST(request: NextRequest) {
 
     const memberResult = db.prepare(`
       INSERT INTO members (first_name, last_name, contact_no, address, birthdate, 
-        emergency_contact, card_uid, custom_card_id, image_path, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        emergency_contact, card_uid, custom_card_id, image_path, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(first_name, last_name, contact_no, address, birthdate,
-           emergency_contact, card_uid, custom_card_id, image_path, now);
+           emergency_contact, card_uid, custom_card_id, image_path, notes, now);
 
     const member_id = memberResult.lastInsertRowid;
 
