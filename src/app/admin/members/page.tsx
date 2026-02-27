@@ -11,6 +11,7 @@ interface Member {
   card_uid: string;
   custom_card_id: string;
   image_path: string;
+  emergency_contact: string;
   plan_type: string;
   membership_status: string;
   end_date: string;
@@ -28,6 +29,7 @@ interface ImportPreview {
   amount?: string;
   mop?: string;
   contact_no?: string;
+  emergency_contact?: string;
 }
 
 interface ImportResult {
@@ -249,6 +251,7 @@ export default function MembersPage() {
                   <th className="px-3 py-2 font-semibold text-gray-600">Amount</th>
                   <th className="px-3 py-2 font-semibold text-gray-600">MOP</th>
                   <th className="px-3 py-2 font-semibold text-gray-600">Contact</th>
+                  <th className="px-3 py-2 font-semibold text-gray-600">Emergency Contact - Name</th>
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +274,7 @@ export default function MembersPage() {
                     <td className="px-3 py-2 text-gray-600">{row.amount || '-'}</td>
                     <td className="px-3 py-2 text-gray-600">{row.mop || '-'}</td>
                     <td className="px-3 py-2 text-gray-600">{row.contact_no || '-'}</td>
+                    <td className="px-3 py-2 text-gray-600">{row.emergency_contact || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -316,17 +320,18 @@ export default function MembersPage() {
                 <th className="px-4 py-3 text-gray-600 font-semibold text-sm">Status</th>
                 <th className="px-4 py-3 text-gray-600 font-semibold text-sm">End Date</th>
                 <th className="px-4 py-3 text-gray-600 font-semibold text-sm">Days Left</th>
+                <th className="px-4 py-3 text-gray-600 font-semibold text-sm">Emergency Contact - Name</th>
                 <th className="px-4 py-3 text-gray-600 font-semibold text-sm">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-400 animate-pulse">Loading...</td>
+                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400 animate-pulse">Loading...</td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-400">No members found</td>
+                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400">No members found</td>
                 </tr>
               ) : (
                 members.map((m) => {
@@ -372,6 +377,7 @@ export default function MembersPage() {
                           </span>
                         ) : '-'}
                       </td>
+                      <td className="px-4 py-3 text-gray-600 text-sm">{m.emergency_contact || '-'}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
                           <Link href={`/admin/members/${m.member_id}`} className="text-blue-500 hover:text-blue-700 text-sm font-medium">View</Link>
