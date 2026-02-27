@@ -137,8 +137,8 @@ function parseDate(value: unknown): string {
         [, day, month, year] = m.map(Number);
       }
       if (month < 1 || month > 12 || day < 1 || day > 31) continue;
-      // Reject unreasonable years (before 2020 or after 2099)
-      if (year < 2020 || year > 2099) continue;
+      // Reject unreasonable years (before 1900 or after 2099)
+      if (year < 1900 || year > 2099) continue;
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
   }
@@ -149,7 +149,7 @@ function parseDate(value: unknown): string {
     // Use UTC values to avoid timezone shift for date-only strings
     const y = parsed.getUTCFullYear();
     // Reject unreasonable years
-    if (y < 2020 || y > 2099) return '';
+    if (y < 1900 || y > 2099) return '';
     const mo = String(parsed.getUTCMonth() + 1).padStart(2, '0');
     const d = String(parsed.getUTCDate()).padStart(2, '0');
     return `${y}-${mo}-${d}`;
