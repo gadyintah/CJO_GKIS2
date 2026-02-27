@@ -28,6 +28,7 @@ export default function RenewMemberPage() {
     start_date: new Date().toISOString().split('T')[0],
     amount: '',
     mop: 'Cash',
+    notes: '',
   });
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function RenewMemberPage() {
     fetchMember();
   }, [params.id, router]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
@@ -174,6 +175,12 @@ export default function RenewMemberPage() {
                 <option value="Other">Other</option>
               </select>
             </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes / Comments</label>
+            <textarea name="notes" value={formData.notes} onChange={handleChange}
+              rows={3} placeholder="Any notes about this renewal..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
           </div>
         </div>
 

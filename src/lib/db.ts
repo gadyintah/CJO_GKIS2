@@ -1,29 +1,35 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import { createClient, Client } from '@libsql/client';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'gym.db');
+let client: Client | null = null;
+let initialized = false;
 
-let db: Database.Database | null = null;
+export async function getDb(): Promise<Client> {
+  if (!client) {
+    if (!process.env.TURSO_DATABASE_URL) {
+      const fs = await import('fs');
+      const path = await import('path');
+      const dataDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+    }
 
-export function getDb(): Database.Database {
-  if (db) return db;
-
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    client = createClient({
+      url: process.env.TURSO_DATABASE_URL || 'file:data/gym.db',
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
   }
 
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  if (!initialized) {
+    await initializeSchema(client);
+    initialized = true;
+  }
 
-  initializeSchema(db);
-  return db;
+  return client;
 }
 
-function initializeSchema(db: Database.Database): void {
-  db.exec(`
+async function initializeSchema(db: Client): Promise<void> {
+  await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS members (
       member_id INTEGER PRIMARY KEY AUTOINCREMENT,
       first_name TEXT NOT NULL,
@@ -32,6 +38,7 @@ function initializeSchema(db: Database.Database): void {
       address TEXT,
       birthdate TEXT,
       emergency_contact TEXT,
+      emergency_contact_number TEXT,
       card_uid TEXT UNIQUE,
       custom_card_id TEXT,
       image_path TEXT,
@@ -90,8 +97,18 @@ function initializeSchema(db: Database.Database): void {
   `);
 
   // Migration: add notes column to members if it doesn't exist yet
-  const cols = db.prepare(`PRAGMA table_info(members)`).all() as { name: string }[];
+  const cols = (await db.execute(`PRAGMA table_info(members)`)).rows as unknown as { name: string }[];
   if (!cols.some(c => c.name === 'notes')) {
-    db.exec(`ALTER TABLE members ADD COLUMN notes TEXT`);
+    await db.execute(`ALTER TABLE members ADD COLUMN notes TEXT`);
+  }
+  // Migration: add emergency_contact_number column to members if it doesn't exist yet
+  if (!cols.some(c => c.name === 'emergency_contact_number')) {
+    await db.execute(`ALTER TABLE members ADD COLUMN emergency_contact_number TEXT`);
+  }
+
+  // Migration: add mop column to walkins if it doesn't exist yet
+  const walkinCols = (await db.execute(`PRAGMA table_info(walkins)`)).rows as unknown as { name: string }[];
+  if (!walkinCols.some(c => c.name === 'mop')) {
+    await db.execute(`ALTER TABLE walkins ADD COLUMN mop TEXT`);
   }
 }

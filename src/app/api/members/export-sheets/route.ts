@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import ExcelJS from 'exceljs';
 
-interface ExportRow {
+interface MemberRow {
   member_id: number;
   first_name: string;
   last_name: string;
@@ -22,6 +22,7 @@ interface ExportRow {
   days_remaining: number;
   amount: number;
   mop: string;
+  payment_notes: string;
   card_status: string;
 }
 
@@ -34,17 +35,7 @@ interface WalkinRow {
   mop: string;
 }
 
-function calcAge(birthdate: string): number | string {
-  if (!birthdate) return '';
-  const dob = new Date(birthdate);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
-}
-
-function deriveCardStatus(row: ExportRow): string {
+function deriveCardStatus(row: MemberRow): string {
   if (row.card_status) return row.card_status;
   if (!row.custom_card_id && !row.card_uid) return 'unClaimed';
   if (row.membership_status === 'active') return 'CLAIMED + RN PRM';
@@ -76,6 +67,7 @@ export async function GET() {
         CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining,
         p.amount,
         p.mop,
+        p.notes as payment_notes,
         NULL as card_status
       FROM members m
       LEFT JOIN memberships ms ON ms.membership_id = (
@@ -90,7 +82,7 @@ export async function GET() {
       )
       ORDER BY m.member_id ASC`,
       args: [],
-    })).rows as unknown as ExportRow[];
+    })).rows as unknown as MemberRow[];
 
     const walkins = (await db.execute({
       sql: `SELECT * FROM walkins ORDER BY payment_date DESC`,
@@ -100,7 +92,15 @@ export async function GET() {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';
     workbook.created = new Date();
+
+    // ── Sheet 1: Complete Member Data ──
     const sheet = workbook.addWorksheet('Members');
+
+    // Column layout — letters used in formulas below
+    // A=No, B=Name, C=CardStatus, D=CardNo, E=Status, F=StartDate, G=Months,
+    // H=EndDate, I=Amount, J=MOP, K=ContactNo, L=Address,
+    // M=Birthdate, N=Age, O=EmergencyName, P=EmergencyNo, Q=Notes
+    const COL = { name: 'B', status: 'E', months: 'G', amount: 'I', birthdate: 'M', notes: 'Q' };
 
     sheet.columns = [
       { header: 'No.', key: 'no', width: 6 },
@@ -122,16 +122,14 @@ export async function GET() {
       { header: 'Notes', key: 'notes', width: 36 },
     ];
 
+    // Header styling
     const headerRow = sheet.getRow(1);
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF374151' },
-    };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-    headerRow.height = 20;
+    headerRow.height = 22;
 
+    const dataStartRow = 2;
     let rowNum = 0;
 
     rows.forEach((row) => {
@@ -140,6 +138,12 @@ export async function GET() {
         row.end_date && new Date(row.end_date) >= new Date();
       const statusLabel = isActive ? 'Ongoing' : 'Expired';
       const cardStatus = deriveCardStatus(row);
+
+      const currentRow = dataStartRow + rowNum - 1;
+      const ageFormula = `IF(${COL.birthdate}${currentRow}="","",DATEDIF(${COL.birthdate}${currentRow},TODAY(),"Y"))`;
+
+      // Combine member notes and payment notes
+      const allNotes = [row.notes, row.payment_notes].filter(Boolean).join(' | ');
 
       const excelRow = sheet.addRow({
         no: rowNum,
@@ -150,17 +154,18 @@ export async function GET() {
         start_date: row.start_date || '',
         months: row.months_purchased || '',
         end_date: row.end_date || '',
-        amount: row.amount || '',
+        amount: row.amount || 0,
         mop: row.mop || '',
         contact_no: row.contact_no || '',
         address: row.address || '',
         birthdate: row.birthdate || '',
-        age: calcAge(row.birthdate),
+        age: { formula: ageFormula },
         emergency_contact: row.emergency_contact || '',
         emergency_contact_number: row.emergency_contact_number || '',
-        notes: row.notes || '',
+        notes: allNotes,
       });
 
+      // Row color coding
       let rowFill: ExcelJS.Fill | undefined;
       if (isActive) {
         const daysNum = row.days_remaining != null ? row.days_remaining : -1;
@@ -179,12 +184,13 @@ export async function GET() {
         });
       }
 
-      excelRow.alignment = { vertical: 'middle' };
+      excelRow.alignment = { vertical: 'middle', wrapText: true };
     });
 
-    // Add walk-ins to the export
+    // Add walk-ins to the sheet
     walkins.forEach((w) => {
       rowNum++;
+
       const excelRow = sheet.addRow({
         no: rowNum,
         name: w.guest_name || 'Walk-in Guest',
@@ -194,7 +200,7 @@ export async function GET() {
         start_date: w.payment_date || '',
         months: '',
         end_date: '',
-        amount: w.amount_paid || '',
+        amount: w.amount_paid || 0,
         mop: w.mop || '',
         contact_no: '',
         address: '',
@@ -209,11 +215,103 @@ export async function GET() {
       excelRow.eachCell((cell) => {
         cell.fill = walkinFill;
       });
-      excelRow.alignment = { vertical: 'middle' };
+      excelRow.alignment = { vertical: 'middle', wrapText: true };
     });
 
+    // ── Summary Formulas Section ──
+    const lastDataRow = dataStartRow + rowNum - 1;
+    const gapRow = lastDataRow + 2;
+
+    // Summary header
+    const summaryHeaderRow = sheet.getRow(gapRow);
+    sheet.mergeCells(`A${gapRow}:D${gapRow}`);
+    summaryHeaderRow.getCell(1).value = 'SUMMARY';
+    summaryHeaderRow.getCell(1).font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+    summaryHeaderRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+    summaryHeaderRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    for (let c = 2; c <= 4; c++) {
+      summaryHeaderRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+    }
+    summaryHeaderRow.height = 24;
+
+    const summaryFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+    const summaryFont: Partial<ExcelJS.Font> = { bold: true };
+    const summaryLabelFont: Partial<ExcelJS.Font> = { bold: false, color: { argb: 'FF374151' } };
+
+    const summaryItems: { label: string; formula: string }[] = [
+      { label: 'Total Members', formula: `COUNTA(${COL.name}${dataStartRow}:${COL.name}${lastDataRow})` },
+      { label: 'Active Members', formula: `COUNTIF(${COL.status}${dataStartRow}:${COL.status}${lastDataRow},"Ongoing")` },
+      { label: 'Expired Members', formula: `COUNTIF(${COL.status}${dataStartRow}:${COL.status}${lastDataRow},"Expired")` },
+      { label: 'Total Revenue', formula: `SUM(${COL.amount}${dataStartRow}:${COL.amount}${lastDataRow})` },
+      { label: 'Average Revenue per Member', formula: `IF(COUNTA(${COL.name}${dataStartRow}:${COL.name}${lastDataRow})=0,0,SUM(${COL.amount}${dataStartRow}:${COL.amount}${lastDataRow})/COUNTA(${COL.name}${dataStartRow}:${COL.name}${lastDataRow}))` },
+      { label: 'Monthly Plan Members', formula: `COUNTIF(${COL.months}${dataStartRow}:${COL.months}${lastDataRow},1)` },
+      { label: 'Members with Notes', formula: `COUNTA(${COL.notes}${dataStartRow}:${COL.notes}${lastDataRow})` },
+    ];
+
+    summaryItems.forEach((item, idx) => {
+      const r = gapRow + 1 + idx;
+      const row = sheet.getRow(r);
+      row.getCell(1).value = item.label;
+      row.getCell(1).font = summaryLabelFont;
+      row.getCell(1).fill = summaryFill;
+      row.getCell(2).value = { formula: item.formula };
+      row.getCell(2).font = summaryFont;
+      row.getCell(2).fill = summaryFill;
+      row.getCell(2).numFmt = item.label.includes('Revenue') ? '₱#,##0.00' : '#,##0';
+      for (let c = 3; c <= 4; c++) {
+        row.getCell(c).fill = summaryFill;
+      }
+    });
+
+    // Freeze header row
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
+    // ── Sheet 2: Notes Detail ──
+    const notesSheet = workbook.addWorksheet('Notes');
+
+    notesSheet.columns = [
+      { header: 'No.', key: 'no', width: 6 },
+      { header: 'Member Name', key: 'name', width: 24 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Member Notes', key: 'member_notes', width: 50 },
+      { header: 'Last Payment Notes', key: 'payment_notes', width: 50 },
+    ];
+
+    const notesHeaderRow = notesSheet.getRow(1);
+    notesHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    notesHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+    notesHeaderRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    notesHeaderRow.height = 22;
+
+    let noteIdx = 0;
+    rows.forEach((row) => {
+      if (row.notes || row.payment_notes) {
+        const isActive = row.membership_status === 'active' &&
+          row.end_date && new Date(row.end_date) >= new Date();
+        noteIdx++;
+        const nr = notesSheet.addRow({
+          no: noteIdx,
+          name: `${row.first_name} ${row.last_name}`.trim(),
+          status: isActive ? 'Ongoing' : 'Expired',
+          member_notes: row.notes || '',
+          payment_notes: row.payment_notes || '',
+        });
+        nr.alignment = { vertical: 'top', wrapText: true };
+      }
+    });
+
+    // Notes summary with formula
+    const notesLastRow = noteIdx + 1;
+    const notesSummaryRow = notesSheet.addRow({});
+    notesSummaryRow.getCell(1).value = '';
+    notesSummaryRow.getCell(2).value = 'Total Members with Notes:';
+    notesSummaryRow.getCell(2).font = { bold: true };
+    notesSummaryRow.getCell(3).value = { formula: `COUNTA(B2:B${notesLastRow})` };
+    notesSummaryRow.getCell(3).font = { bold: true };
+
+    notesSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Write and return
     const buffer = await workbook.xlsx.writeBuffer();
 
     const today = new Date().toISOString().split('T')[0];
@@ -221,11 +319,11 @@ export async function GET() {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="CJO_GYM_Members_Export_${today}.xlsx"`,
+        'Content-Disposition': `attachment; filename="CJO_GYM_Google_Sheets_Export_${today}.xlsx"`,
       },
     });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: 'Export failed' }, { status: 500 });
+    console.error('Failed to generate Google Sheets export:', error);
+    return NextResponse.json({ error: 'Google Sheets export failed' }, { status: 500 });
   }
 }

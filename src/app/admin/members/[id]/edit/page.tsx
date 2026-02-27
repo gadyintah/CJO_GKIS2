@@ -12,6 +12,7 @@ interface MemberInfo {
   address: string;
   birthdate: string;
   emergency_contact: string;
+  emergency_contact_number: string;
   card_uid: string;
   custom_card_id: string;
   image_path: string;
@@ -44,6 +45,7 @@ export default function EditMemberPage() {
           address: m.address || '',
           birthdate: m.birthdate || '',
           emergency_contact: m.emergency_contact || '',
+          emergency_contact_number: m.emergency_contact_number || '',
           card_uid: m.card_uid || '',
           custom_card_id: m.custom_card_id || '',
           image_path: m.image_path || '',
@@ -179,10 +181,16 @@ export default function EditMemberPage() {
               <input type="text" name="address" value={formData.address} onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
             </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Name</label>
               <input type="text" name="emergency_contact" value={formData.emergency_contact} onChange={handleChange}
-                placeholder="Name - Relationship - Contact number"
+                placeholder="Name and relationship"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Number</label>
+              <input type="tel" name="emergency_contact_number" value={formData.emergency_contact_number} onChange={handleChange}
+                placeholder="Contact number"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
             </div>
             <div className="col-span-2">

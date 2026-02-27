@@ -1,49 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { InValue } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || '';
     const member_id = searchParams.get('member_id') || '';
     const card_uid = searchParams.get('card_uid') || '';
     const from = searchParams.get('from') || '';
     const to = searchParams.get('to') || '';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.max(1, Math.min(500, parseInt(searchParams.get('limit') || '100')));
+    const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT l.*, m.first_name, m.last_name, m.image_path
-      FROM logs l
-      LEFT JOIN members m ON l.member_id = m.member_id
-      WHERE 1=1
-    `;
-    const params: string[] = [];
+    let whereClause = ` WHERE 1=1`;
+    const params: InValue[] = [];
 
     if (date) {
-      query += ` AND date(l.timestamp) = ?`;
+      whereClause += ` AND date(l.timestamp) = ?`;
       params.push(date);
     }
     if (from) {
-      query += ` AND date(l.timestamp) >= ?`;
+      whereClause += ` AND date(l.timestamp) >= ?`;
       params.push(from);
     }
     if (to) {
-      query += ` AND date(l.timestamp) <= ?`;
+      whereClause += ` AND date(l.timestamp) <= ?`;
       params.push(to);
     }
     if (member_id) {
-      query += ` AND l.member_id = ?`;
+      whereClause += ` AND l.member_id = ?`;
       params.push(member_id);
     }
     if (card_uid) {
-      query += ` AND l.card_uid LIKE ?`;
+      whereClause += ` AND l.card_uid LIKE ?`;
       params.push(`%${card_uid}%`);
     }
 
-    query += ` ORDER BY l.timestamp DESC LIMIT 200`;
+    const countResult = (await db.execute({
+      sql: `SELECT COUNT(*) as count FROM logs l LEFT JOIN members m ON l.member_id = m.member_id` + whereClause,
+      args: params,
+    })).rows[0] as unknown as { count: number };
+    const totalCount = countResult.count;
+    const totalPages = Math.ceil(totalCount / limit);
 
-    const logs = db.prepare(query).all(...params);
-    return NextResponse.json({ logs });
+    const logs = (await db.execute({
+      sql: `SELECT l.*, m.first_name, m.last_name, m.image_path
+      FROM logs l
+      LEFT JOIN members m ON l.member_id = m.member_id` + whereClause + ` ORDER BY l.timestamp DESC LIMIT ? OFFSET ?`,
+      args: [...params, limit, offset],
+    })).rows;
+
+    return NextResponse.json({ logs, totalCount, page, totalPages });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to fetch logs' }, { status: 500 });

@@ -21,20 +21,28 @@ export default function WalkinsPage() {
   const [data, setData] = useState<WalkinsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ guest_name: '', amount_paid: '', notes: '', mop: 'Cash' });
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/walkins');
+      const params = new URLSearchParams();
+      params.set('page', page.toString());
+      params.set('limit', '100');
+      const res = await fetch(`/api/walkins?${params}`);
       const json = await res.json();
       setData(json);
+      setTotalCount(json.totalCount || 0);
+      setTotalPages(json.totalPages || 1);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -67,7 +75,7 @@ export default function WalkinsPage() {
     <div className="p-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Walk-in Guests</h1>
-        <p className="text-gray-500 mt-1">Track daily walk-in visitors</p>
+        <p className="text-gray-500 mt-1">Track daily walk-in visitors — {totalCount} total</p>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-8">
@@ -159,6 +167,47 @@ export default function WalkinsPage() {
           )}
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            ← Prev
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+            .reduce<(number | string)[]>((acc, p, i, arr) => {
+              if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('...');
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, i) =>
+              typeof p === 'string' ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-gray-400">...</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                    page === p ? 'bg-yellow-500 text-gray-900' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

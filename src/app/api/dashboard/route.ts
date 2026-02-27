@@ -3,61 +3,69 @@ import { getDb } from '@/lib/db';
 
 export async function GET() {
   try {
-    const db = getDb();
+    const db = await getDb();
     const today = new Date().toISOString().split('T')[0];
 
-    const checkedInToday = (db.prepare(`
-      SELECT COUNT(DISTINCT member_id) as count FROM logs
-      WHERE action = 'CHECK_IN' AND date(timestamp) = ?
-    `).get(today) as { count: number }).count;
+    const checkedInToday = ((await db.execute({
+      sql: `SELECT COUNT(DISTINCT member_id) as count FROM logs
+      WHERE action = 'CHECK_IN' AND date(timestamp) = ?`,
+      args: [today],
+    })).rows[0] as unknown as { count: number }).count;
 
-    const walkinsToday = (db.prepare(`
-      SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
-      FROM walkins WHERE payment_date = ?
-    `).get(today) as { count: number; total: number });
+    const walkinsToday = (await db.execute({
+      sql: `SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
+      FROM walkins WHERE payment_date = ?`,
+      args: [today],
+    })).rows[0] as unknown as { count: number; total: number };
 
-    const revenueToday = (db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM payments
-      WHERE payment_date = ?
-    `).get(today) as { total: number }).total;
+    const revenueToday = ((await db.execute({
+      sql: `SELECT COALESCE(SUM(amount), 0) as total FROM payments
+      WHERE payment_date = ?`,
+      args: [today],
+    })).rows[0] as unknown as { total: number }).total;
 
     const totalRevenue = (revenueToday) + (walkinsToday.total || 0);
 
-    const activeMembers = (db.prepare(`
-      SELECT COUNT(*) as count FROM memberships
-      WHERE status = 'active' AND end_date >= date('now')
-    `).get() as { count: number }).count;
+    const activeMembers = ((await db.execute({
+      sql: `SELECT COUNT(*) as count FROM memberships
+      WHERE status = 'active' AND end_date >= date('now')`,
+      args: [],
+    })).rows[0] as unknown as { count: number }).count;
 
-    const expiredMembers = (db.prepare(`
-      SELECT COUNT(DISTINCT m.member_id) as count
+    const expiredMembers = ((await db.execute({
+      sql: `SELECT COUNT(DISTINCT m.member_id) as count
       FROM members m
       WHERE NOT EXISTS (
         SELECT 1 FROM memberships ms
         WHERE ms.member_id = m.member_id AND ms.status = 'active' AND ms.end_date >= date('now')
-      )
-    `).get() as { count: number }).count;
+      )`,
+      args: [],
+    })).rows[0] as unknown as { count: number }).count;
 
-    const weeklyAttendance = db.prepare(`
-      SELECT date(timestamp) as date, COUNT(DISTINCT member_id) as count
+    const weeklyAttendance = (await db.execute({
+      sql: `SELECT date(timestamp) as date, COUNT(DISTINCT member_id) as count
       FROM logs WHERE action = 'CHECK_IN'
         AND date(timestamp) >= date('now', '-6 days')
       GROUP BY date(timestamp)
-      ORDER BY date
-    `).all();
+      ORDER BY date`,
+      args: [],
+    })).rows;
 
-    const monthlyRevenueSummary = db.prepare(`
-      SELECT strftime('%Y-%m', payment_date) as month, SUM(amount) as total
+    const monthlyRevenueSummary = (await db.execute({
+      sql: `SELECT strftime('%Y-%m', payment_date) as month, SUM(amount) as total
       FROM payments
       WHERE strftime('%Y-%m', payment_date) >= strftime('%Y-%m', date('now', '-5 months'))
-      GROUP BY month ORDER BY month
-    `).all();
+      GROUP BY month ORDER BY month`,
+      args: [],
+    })).rows;
 
-    const recentActivity = db.prepare(`
-      SELECT l.*, m.first_name, m.last_name, m.image_path
+    const recentActivity = (await db.execute({
+      sql: `SELECT l.*, m.first_name, m.last_name, m.image_path
       FROM logs l
       LEFT JOIN members m ON l.member_id = m.member_id
-      ORDER BY l.timestamp DESC LIMIT 10
-    `).all();
+      ORDER BY l.timestamp DESC LIMIT 10`,
+      args: [],
+    })).rows;
 
     return NextResponse.json({
       checkedInToday,

@@ -59,6 +59,10 @@ export default function DashboardPage() {
     window.open('/api/members/export', '_blank');
   };
 
+  const handleGoogleSheetsExport = () => {
+    window.open('/api/members/export-sheets', '_blank');
+  };
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-screen">
@@ -77,6 +81,12 @@ export default function DashboardPage() {
           <p className="text-gray-500 mt-1">{new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={handleGoogleSheetsExport}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <span>📊</span> Google Sheets
+          </button>
           <button
             onClick={handleExport}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"

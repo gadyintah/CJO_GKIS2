@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import ExcelJS from 'exceljs';
+import { InValue } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || '';
     const from = searchParams.get('from') || '';
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN members m ON l.member_id = m.member_id
       WHERE 1=1
     `;
-    const params: string[] = [];
+    const params: InValue[] = [];
 
     if (date) {
       query += ` AND date(l.timestamp) = ?`;
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     query += ` ORDER BY l.timestamp DESC`;
 
-    const logs = db.prepare(query).all(...params) as {
+    const logs = (await db.execute({ sql: query, args: params })).rows as unknown as {
       log_id: number;
       member_id: number;
       first_name: string;
