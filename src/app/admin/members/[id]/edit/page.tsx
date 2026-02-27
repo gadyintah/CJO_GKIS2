@@ -182,13 +182,13 @@ export default function EditMemberPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact (Name)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Name</label>
               <input type="text" name="emergency_contact" value={formData.emergency_contact} onChange={handleChange}
                 placeholder="Name and relationship"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Number</label>
               <input type="tel" name="emergency_contact_number" value={formData.emergency_contact_number} onChange={handleChange}
                 placeholder="Contact number"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-400" />

@@ -197,7 +197,7 @@ export default function RegisterMemberPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact (Name)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Name</label>
               <input
                 type="text"
                 name="emergency_contact"
@@ -208,7 +208,7 @@ export default function RegisterMemberPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact - Number</label>
               <input
                 type="tel"
                 name="emergency_contact_number"

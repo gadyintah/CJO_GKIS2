@@ -105,4 +105,10 @@ async function initializeSchema(db: Client): Promise<void> {
   if (!cols.some(c => c.name === 'emergency_contact_number')) {
     await db.execute(`ALTER TABLE members ADD COLUMN emergency_contact_number TEXT`);
   }
+
+  // Migration: add mop column to walkins if it doesn't exist yet
+  const walkinCols = (await db.execute(`PRAGMA table_info(walkins)`)).rows as unknown as { name: string }[];
+  if (!walkinCols.some(c => c.name === 'mop')) {
+    await db.execute(`ALTER TABLE walkins ADD COLUMN mop TEXT`);
+  }
 }

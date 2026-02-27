@@ -273,9 +273,19 @@ export default function MemberDetailPage() {
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-semibold text-gray-700 mb-3">🚨 Emergency Contact</h3>
             {(member.emergency_contact || member.emergency_contact_number) ? (
-              <div className="space-y-1">
-                {member.emergency_contact && <p className="text-gray-800">{member.emergency_contact}</p>}
-                {member.emergency_contact_number && <p className="text-gray-600">📞 {member.emergency_contact_number}</p>}
+              <div className="space-y-2">
+                {member.emergency_contact && (
+                  <div>
+                    <dt className="text-sm text-gray-500">Emergency Contact - Name</dt>
+                    <dd className="text-gray-800">{member.emergency_contact}</dd>
+                  </div>
+                )}
+                {member.emergency_contact_number && (
+                  <div>
+                    <dt className="text-sm text-gray-500">Emergency Contact - Number</dt>
+                    <dd className="text-gray-600">📞 {member.emergency_contact_number}</dd>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-gray-400 italic">No emergency contact provided</p>

@@ -63,14 +63,14 @@ export async function POST(request: NextRequest) {
   try {
     const db = await getDb();
     const body = await request.json();
-    const { guest_name, amount_paid, payment_date, notes } = body;
+    const { guest_name, amount_paid, payment_date, notes, mop } = body;
 
     const date = payment_date || new Date().toISOString().split('T')[0];
 
     const result = await db.execute({
-      sql: `INSERT INTO walkins (guest_name, amount_paid, payment_date, notes)
-      VALUES (?, ?, ?, ?)`,
-      args: [guest_name || 'Walk-in Guest', amount_paid || 0, date, notes],
+      sql: `INSERT INTO walkins (guest_name, amount_paid, payment_date, notes, mop)
+      VALUES (?, ?, ?, ?, ?)`,
+      args: [guest_name || 'Walk-in Guest', amount_paid || 0, date, notes, mop || 'Cash'],
     });
 
     return NextResponse.json({ success: true, walkin_id: Number(result.lastInsertRowid) }, { status: 201 });

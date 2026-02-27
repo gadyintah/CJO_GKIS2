@@ -13,6 +13,7 @@ interface ExportRow {
   birthdate: string;
   emergency_contact: string;
   emergency_contact_number: string;
+  notes: string;
   plan_type: string;
   membership_status: string;
   start_date: string;
@@ -22,6 +23,15 @@ interface ExportRow {
   amount: number;
   mop: string;
   card_status: string;
+}
+
+interface WalkinRow {
+  walkin_id: number;
+  guest_name: string;
+  amount_paid: number;
+  payment_date: string;
+  notes: string;
+  mop: string;
 }
 
 function calcAge(birthdate: string): number | string {
@@ -57,6 +67,7 @@ export async function GET() {
         m.birthdate,
         m.emergency_contact,
         m.emergency_contact_number,
+        m.notes,
         ms.plan_type,
         ms.status as membership_status,
         ms.start_date,
@@ -81,6 +92,11 @@ export async function GET() {
       args: [],
     })).rows as unknown as ExportRow[];
 
+    const walkins = (await db.execute({
+      sql: `SELECT * FROM walkins ORDER BY payment_date DESC`,
+      args: [],
+    })).rows as unknown as WalkinRow[];
+
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';
     workbook.created = new Date();
@@ -94,7 +110,6 @@ export async function GET() {
       { header: 'Status', key: 'status', width: 12 },
       { header: 'Membership Date', key: 'start_date', width: 16 },
       { header: 'No. of Months', key: 'months', width: 14 },
-      { header: 'Days Left', key: 'days_left', width: 10 },
       { header: 'End Date', key: 'end_date', width: 14 },
       { header: 'Amount', key: 'amount', width: 12 },
       { header: 'MOP', key: 'mop', width: 12 },
@@ -102,8 +117,9 @@ export async function GET() {
       { header: 'Address', key: 'address', width: 28 },
       { header: 'Birthdate', key: 'birthdate', width: 14 },
       { header: 'Age', key: 'age', width: 6 },
-      { header: 'Emergency Contact', key: 'emergency_contact', width: 28 },
-      { header: 'Emergency Contact No.', key: 'emergency_contact_number', width: 20 },
+      { header: 'Emergency Contact - Name', key: 'emergency_contact', width: 28 },
+      { header: 'Emergency Contact - Number', key: 'emergency_contact_number', width: 22 },
+      { header: 'Notes', key: 'notes', width: 36 },
     ];
 
     const headerRow = sheet.getRow(1);
@@ -116,22 +132,23 @@ export async function GET() {
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
     headerRow.height = 20;
 
-    rows.forEach((row, index) => {
+    let rowNum = 0;
+
+    rows.forEach((row) => {
+      rowNum++;
       const isActive = row.membership_status === 'active' &&
         row.end_date && new Date(row.end_date) >= new Date();
       const statusLabel = isActive ? 'Ongoing' : 'Expired';
       const cardStatus = deriveCardStatus(row);
-      const daysLeft = isActive && row.days_remaining != null ? row.days_remaining : '';
 
       const excelRow = sheet.addRow({
-        no: index + 1,
+        no: rowNum,
         name: `${row.first_name} ${row.last_name}`.trim(),
         card_status: cardStatus,
-        card_no: row.custom_card_id || row.card_uid || '',
+        card_no: row.custom_card_id || '',
         status: statusLabel,
         start_date: row.start_date || '',
         months: row.months_purchased || '',
-        days_left: daysLeft,
         end_date: row.end_date || '',
         amount: row.amount || '',
         mop: row.mop || '',
@@ -141,11 +158,12 @@ export async function GET() {
         age: calcAge(row.birthdate),
         emergency_contact: row.emergency_contact || '',
         emergency_contact_number: row.emergency_contact_number || '',
+        notes: row.notes || '',
       });
 
       let rowFill: ExcelJS.Fill | undefined;
       if (isActive) {
-        const daysNum = typeof daysLeft === 'number' ? daysLeft : -1;
+        const daysNum = row.days_remaining != null ? row.days_remaining : -1;
         if (daysNum <= 7 && daysNum >= 0) {
           rowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
         } else {
@@ -161,6 +179,36 @@ export async function GET() {
         });
       }
 
+      excelRow.alignment = { vertical: 'middle' };
+    });
+
+    // Add walk-ins to the export
+    walkins.forEach((w) => {
+      rowNum++;
+      const excelRow = sheet.addRow({
+        no: rowNum,
+        name: w.guest_name || 'Walk-in Guest',
+        card_status: 'Walk-in',
+        card_no: '',
+        status: '',
+        start_date: w.payment_date || '',
+        months: '',
+        end_date: '',
+        amount: w.amount_paid || '',
+        mop: w.mop || '',
+        contact_no: '',
+        address: '',
+        birthdate: '',
+        age: '',
+        emergency_contact: '',
+        emergency_contact_number: '',
+        notes: w.notes || '',
+      });
+
+      const walkinFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3F2FD' } };
+      excelRow.eachCell((cell) => {
+        cell.fill = walkinFill;
+      });
       excelRow.alignment = { vertical: 'middle' };
     });
 
