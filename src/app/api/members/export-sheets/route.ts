@@ -190,8 +190,6 @@ export async function GET() {
     // Add walk-ins to the sheet
     walkins.forEach((w) => {
       rowNum++;
-      const currentRow = dataStartRow + rowNum - 1;
-      const ageFormula = `IF(${COL.birthdate}${currentRow}="","",DATEDIF(${COL.birthdate}${currentRow},TODAY(),"Y"))`;
 
       const excelRow = sheet.addRow({
         no: rowNum,
@@ -207,7 +205,7 @@ export async function GET() {
         contact_no: '',
         address: '',
         birthdate: '',
-        age: { formula: ageFormula },
+        age: '',
         emergency_contact: '',
         emergency_contact_number: '',
         notes: w.notes || '',
