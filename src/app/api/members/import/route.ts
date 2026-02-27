@@ -63,6 +63,7 @@ const COLUMN_MAP: Record<string, keyof ImportedRow> = {
   birthday: 'birthdate',
   emergency_contact: 'emergency_contact',
   emergency: 'emergency_contact',
+  emergency_contact_name: 'emergency_contact',
   emergency_contact_number: 'emergency_contact_number',
   emergency_number: 'emergency_contact_number',
   emergency_phone: 'emergency_contact_number',
