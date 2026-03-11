@@ -51,7 +51,8 @@ export async function GET(request: NextRequest) {
               86400000,
           )
         : null;
-      const { memberships: _, ...memberData } = m;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { memberships: _memberships, ...memberData } = m;
       return {
         ...memberData,
         plan_type: ms?.plan_type ?? null,

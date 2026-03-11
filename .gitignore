@@ -42,4 +42,8 @@ Thumbs.db
 *.swp
 *.swo
 
+# Prisma generated client
 /src/generated/prisma
+
+# Build artifacts
+*.tsbuildinfo
