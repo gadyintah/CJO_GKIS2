@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       timestampConditions.gte = from;
     }
     if (to) {
-      timestampConditions.lte = to + '\uffff';
+      timestampConditions.lte = to + 'T23:59:59.999Z';
     }
 
     const where: Record<string, unknown> = {};
