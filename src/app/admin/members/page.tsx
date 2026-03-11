@@ -60,6 +60,7 @@ export default function MembersPage() {
       if (search) params.set('search', search);
       if (filter !== 'all') params.set('status', filter);
       const res = await fetch(`/api/members?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch members');
       const data = await res.json();
       setMembers(data.members || []);
     } catch (err) {
