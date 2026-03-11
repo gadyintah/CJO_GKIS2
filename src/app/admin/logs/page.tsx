@@ -44,6 +44,7 @@ export default function LogsPage() {
       if (filters.to) params.set('to', filters.to);
 
       const res = await fetch(`/api/logs?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch logs');
       const json = await res.json();
       setLogs(json.logs || []);
     } catch (err) {

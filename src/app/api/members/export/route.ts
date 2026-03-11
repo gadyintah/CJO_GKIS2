@@ -1,26 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import ExcelJS from 'exceljs';
 
 interface ExportRow {
   member_id: number;
   first_name: string;
   last_name: string;
-  card_uid: string;
-  custom_card_id: string;
-  contact_no: string;
-  address: string;
-  birthdate: string;
-  emergency_contact: string;
-  plan_type: string;
-  membership_status: string;
-  start_date: string;
-  end_date: string;
-  months_purchased: number;
-  days_remaining: number;
-  amount: number;
-  mop: string;
-  card_status: string;
+  card_uid: string | null;
+  custom_card_id: string | null;
+  contact_no: string | null;
+  address: string | null;
+  birthdate: string | null;
+  emergency_contact: string | null;
+  plan_type: string | null;
+  membership_status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  months_purchased: number | null;
+  days_remaining: number | null;
+  amount: number | null;
+  mop: string | null;
+  card_status: string | null;
 }
 
 function calcAge(birthdate: string): number | string {
@@ -42,41 +42,54 @@ function deriveCardStatus(row: ExportRow): string {
 
 export async function GET() {
   try {
-    const db = getDb();
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    const rows = db.prepare(`
-      SELECT 
-        m.member_id,
-        m.first_name,
-        m.last_name,
-        m.card_uid,
-        m.custom_card_id,
-        m.contact_no,
-        m.address,
-        m.birthdate,
-        m.emergency_contact,
-        ms.plan_type,
-        ms.status as membership_status,
-        ms.start_date,
-        ms.end_date,
-        ms.months_purchased,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining,
-        p.amount,
-        p.mop,
-        NULL as card_status
-      FROM members m
-      LEFT JOIN memberships ms ON ms.membership_id = (
-        SELECT membership_id FROM memberships
-        WHERE member_id = m.member_id
-        ORDER BY created_at DESC LIMIT 1
-      )
-      LEFT JOIN payments p ON p.payment_id = (
-        SELECT payment_id FROM payments
-        WHERE member_id = m.member_id
-        ORDER BY payment_date DESC LIMIT 1
-      )
-      ORDER BY m.member_id ASC
-    `).all() as ExportRow[];
+    const members = await prisma.member.findMany({
+      include: {
+        memberships: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+        },
+        payments: {
+          orderBy: { payment_date: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { member_id: 'asc' },
+    });
+
+    const rows: ExportRow[] = members.map((m) => {
+      const ms = m.memberships[0] || null;
+      const p = m.payments[0] || null;
+      const days_remaining = ms?.end_date
+        ? Math.floor(
+            (new Date(ms.end_date + 'T00:00:00').getTime() -
+              new Date(todayStr + 'T00:00:00').getTime()) /
+              86400000,
+          )
+        : null;
+
+      return {
+        member_id: m.member_id,
+        first_name: m.first_name,
+        last_name: m.last_name,
+        card_uid: m.card_uid,
+        custom_card_id: m.custom_card_id,
+        contact_no: m.contact_no,
+        address: m.address,
+        birthdate: m.birthdate,
+        emergency_contact: m.emergency_contact,
+        plan_type: ms?.plan_type ?? null,
+        membership_status: ms?.status ?? null,
+        start_date: ms?.start_date ?? null,
+        end_date: ms?.end_date ?? null,
+        months_purchased: ms?.months_purchased ?? null,
+        days_remaining,
+        amount: p?.amount ?? null,
+        mop: p?.mop ?? null,
+        card_status: null,
+      };
+    });
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';
@@ -134,7 +147,7 @@ export async function GET() {
         contact_no: row.contact_no || '',
         address: row.address || '',
         birthdate: row.birthdate || '',
-        age: calcAge(row.birthdate),
+        age: calcAge(row.birthdate || ''),
         emergency_contact: row.emergency_contact || '',
       });
 

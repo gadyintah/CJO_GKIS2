@@ -30,6 +30,7 @@ export default function RevenuePage() {
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/revenue?date=${today}&month=${month}`);
+        if (!res.ok) throw new Error('Failed to fetch revenue data');
         const json = await res.json();
         setData(json);
       } catch (err) {

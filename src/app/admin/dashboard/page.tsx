@@ -42,6 +42,7 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         const res = await fetch('/api/dashboard');
+        if (!res.ok) throw new Error('Failed to fetch dashboard data');
         const json = await res.json();
         setData(json);
       } catch (err) {
@@ -95,7 +96,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         <StatsCard title="Checked In Today" value={data.checkedInToday} icon="🏋️" color="blue" />
         <StatsCard title="Walk-ins Today" value={data.walkinsToday} icon="🚶" color="purple" />
-        <StatsCard title="Revenue Today" value={`₱${data.revenueToday.toLocaleString()}`} icon="💰" color="green" subtitle={`Membership: ₱${data.membershipRevenueToday.toLocaleString()} | Walk-in: ₱${data.walkinRevenue.toLocaleString()}`} />
+        <StatsCard title="Revenue Today" value={`₱${(data.revenueToday ?? 0).toLocaleString()}`} icon="💰" color="green" subtitle={`Membership: ₱${(data.membershipRevenueToday ?? 0).toLocaleString()} | Walk-in: ₱${(data.walkinRevenue ?? 0).toLocaleString()}`} />
         <StatsCard title="Active Members" value={data.activeMembers} icon="✅" color="green" />
         <StatsCard title="Expired Members" value={data.expiredMembers} icon="⚠️" color="red" />
       </div>
@@ -140,7 +141,7 @@ export default function DashboardPage() {
                       className="h-full bg-green-500 rounded-full flex items-center pl-2"
                       style={{ width: `${Math.min(100, (item.total / Math.max(...data.monthlyRevenueSummary.map(d => d.total))) * 100)}%`, minWidth: '4rem' }}
                     >
-                      <span className="text-xs text-white font-bold">₱{item.total.toLocaleString()}</span>
+                      <span className="text-xs text-white font-bold">₱{(item.total ?? 0).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

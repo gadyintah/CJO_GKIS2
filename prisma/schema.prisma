@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Member {
+  member_id        Int     @id @default(autoincrement())
+  first_name       String
+  last_name        String
+  contact_no       String?
+  address          String?
+  birthdate        String?
+  emergency_contact String?
+  card_uid         String? @unique
+  custom_card_id   String?
+  image_path       String?
+  notes            String?
+  created_at       String?
+
+  memberships Membership[]
+  payments    Payment[]
+  logs        Log[]
+
+  @@map("members")
+}
+
+model Membership {
+  membership_id    Int     @id @default(autoincrement())
+  member_id        Int
+  plan_type        String?
+  start_date       String?
+  end_date         String?
+  months_purchased Int?
+  status           String?
+  created_at       String?
+
+  member   Member    @relation(fields: [member_id], references: [member_id])
+  payments Payment[]
+
+  @@map("memberships")
+}
+
+model Payment {
+  payment_id    Int     @id @default(autoincrement())
+  member_id     Int
+  membership_id Int?
+  amount        Float?
+  mop           String?
+  payment_date  String?
+  notes         String?
+
+  member     Member      @relation(fields: [member_id], references: [member_id])
+  membership Membership? @relation(fields: [membership_id], references: [membership_id])
+
+  @@map("payments")
+}
+
+model Log {
+  log_id           Int     @id @default(autoincrement())
+  member_id        Int?
+  card_uid         String?
+  action           String?
+  timestamp        String?
+  duration_seconds Int?
+
+  member Member? @relation(fields: [member_id], references: [member_id])
+
+  @@map("logs")
+}
+
+model AdminUser {
+  admin_id      Int    @id @default(autoincrement())
+  username      String @unique
+  password_hash String
+  created_at    String?
+
+  @@map("admin_users")
+}
+
+model Walkin {
+  walkin_id    Int     @id @default(autoincrement())
+  guest_name   String?
+  amount_paid  Float?
+  payment_date String?
+  notes        String?
+
+  @@map("walkins")
+}

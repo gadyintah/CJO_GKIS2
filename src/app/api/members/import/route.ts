@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import { addMonths, toDateString } from '@/lib/dateUtils';
 import ExcelJS from 'exceljs';
 
@@ -282,14 +282,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Perform actual import
-    const db = getDb();
+    // Perform actual import using Prisma transaction
     let created = 0;
     let updated = 0;
     const errors: { row: number; error: string }[] = [];
 
-    const importTx = db.transaction(() => {
-      importedRows.forEach((row, index) => {
+    await prisma.$transaction(async (tx) => {
+      for (let index = 0; index < importedRows.length; index++) {
+        const row = importedRows[index];
         try {
           const { first_name, last_name } = splitName(String(row.name || ''));
           if (!first_name) throw new Error('Name is required');
@@ -326,77 +326,70 @@ export async function POST(request: NextRequest) {
           // Check for existing member by custom_card_id
           let existingMember: { member_id: number } | null = null;
           if (custom_card_id) {
-            existingMember = db.prepare(`
-              SELECT member_id FROM members WHERE custom_card_id = ? LIMIT 1
-            `).get(custom_card_id) as { member_id: number } | null;
+            existingMember = await tx.member.findFirst({
+              where: { custom_card_id },
+              select: { member_id: true },
+            });
           }
 
           let member_id: number;
 
           if (existingMember) {
             // Update existing member
-            db.prepare(`
-              UPDATE members SET
-                first_name = ?, last_name = ?, contact_no = ?,
-                address = ?, birthdate = ?, emergency_contact = ?
-              WHERE member_id = ?
-            `).run(first_name, last_name, contact_no, address, birthdate, emergency_contact, existingMember.member_id);
+            await tx.member.update({
+              where: { member_id: existingMember.member_id },
+              data: { first_name, last_name, contact_no, address, birthdate, emergency_contact },
+            });
             member_id = existingMember.member_id;
             updated++;
           } else {
             // Create new member
-            const result = db.prepare(`
-              INSERT INTO members (first_name, last_name, contact_no, address, birthdate,
-                emergency_contact, custom_card_id, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(first_name, last_name, contact_no, address, birthdate, emergency_contact, custom_card_id, now);
-            member_id = Number(result.lastInsertRowid);
+            const newMember = await tx.member.create({
+              data: { first_name, last_name, contact_no, address, birthdate, emergency_contact, custom_card_id, created_at: now },
+            });
+            member_id = newMember.member_id;
             created++;
           }
 
           // Create membership if dates are present
           if (start_date || computedEndDate) {
             // Expire previous active memberships
-            db.prepare(`
-              UPDATE memberships SET status = 'expired'
-              WHERE member_id = ? AND status = 'active'
-            `).run(member_id);
+            await tx.membership.updateMany({
+              where: { member_id, status: 'active' },
+              data: { status: 'expired' },
+            });
 
-            const membershipResult = db.prepare(`
-              INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              member_id,
-              months_purchased && months_purchased >= 12 ? 'yearly' : 'monthly',
-              start_date,
-              computedEndDate,
-              months_purchased,
-              memberStatus,
-              now,
-            );
+            const newMembership = await tx.membership.create({
+              data: {
+                member_id,
+                plan_type: months_purchased && months_purchased >= 12 ? 'yearly' : 'monthly',
+                start_date,
+                end_date: computedEndDate,
+                months_purchased,
+                status: memberStatus,
+                created_at: now,
+              },
+            });
 
             // Create payment if amount provided
             if (amount) {
-              db.prepare(`
-                INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
-              `).run(
-                member_id,
-                membershipResult.lastInsertRowid,
-                amount,
-                mop,
-                start_date || now.split('T')[0],
-                'Imported from spreadsheet',
-              );
+              await tx.payment.create({
+                data: {
+                  member_id,
+                  membership_id: newMembership.membership_id,
+                  amount,
+                  mop,
+                  payment_date: start_date || now.split('T')[0],
+                  notes: 'Imported from spreadsheet',
+                },
+              });
             }
           }
         } catch (err) {
           errors.push({ row: index + 2, error: err instanceof Error ? err.message : 'Unknown error' });
         }
-      });
+      }
     });
-
-    importTx();
 
     return NextResponse.json({
       success: true,
