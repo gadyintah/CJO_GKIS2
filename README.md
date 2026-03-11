@@ -23,21 +23,25 @@ A complete web-based gym membership management system built with **Next.js 15** 
 ### Installation
 
 ```bash
-# Install dependencies
+# 1. Install dependencies (this also auto-generates the Prisma client)
 npm install
 
-# Copy environment file and configure your database URL
+# 2. Copy environment file and configure your database URL
 cp .env.example .env
 # Edit .env and set DATABASE_URL to your PostgreSQL connection string
 
-# Push the Prisma schema to your database
+# 3. Push the Prisma schema to your database
 npx prisma db push
 
-# Start development server
+# 4. Start development server
 npm run dev
 ```
 
 The app will be available at `http://localhost:3000`.
+
+> **⚠️ Important:** You must run `npm install` before running `npm run dev` or `npm run build`.
+> The Prisma client (`src/generated/prisma`) is auto-generated during install and is not committed to git.
+> If you see `Module not found: Can't resolve '@/generated/prisma/client'`, run `npm install` or `npx prisma generate` to fix it.
 
 ## Deploying to Vercel
 
@@ -119,3 +123,27 @@ npx prisma studio
 - **Styling:** Tailwind CSS
 - **Language:** TypeScript
 - **Deployment:** Vercel-ready
+
+## Troubleshooting
+
+### `Module not found: Can't resolve '@/generated/prisma/client'`
+
+This means the Prisma client hasn't been generated yet. Fix it by running:
+
+```bash
+npm install
+# or if dependencies are already installed:
+npx prisma generate
+```
+
+The Prisma client is auto-generated code (located in `src/generated/prisma/`) and is not committed to git. It gets regenerated automatically during `npm install` (via the `postinstall` script) and during `npm run build`.
+
+### `DATABASE_URL` not set
+
+Copy the example env file and edit it with your PostgreSQL connection string:
+
+```bash
+cp .env.example .env
+```
+
+You need a PostgreSQL database. You can get a free one from [Neon](https://neon.tech), [Supabase](https://supabase.com), or use a local PostgreSQL installation.
