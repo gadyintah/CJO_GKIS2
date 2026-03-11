@@ -1,41 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import { addMonths, addYears, toDateString } from '@/lib/dateUtils';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    let query = `
-      SELECT m.*, 
-        ms.plan_type, ms.status as membership_status, ms.start_date, ms.end_date,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
-      FROM members m
-      LEFT JOIN memberships ms ON m.member_id = ms.member_id 
-        AND ms.status = 'active'
-        AND ms.end_date >= date('now')
-    `;
-    const params: string[] = [];
+    const where: Record<string, unknown> = {};
 
     if (search) {
-      query += ` WHERE (m.first_name LIKE ? OR m.last_name LIKE ? OR m.card_uid LIKE ? OR m.custom_card_id LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      where.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { card_uid: { contains: search, mode: 'insensitive' } },
+        { custom_card_id: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
     if (status === 'active') {
-      query += search ? ' AND' : ' WHERE';
-      query += ` ms.membership_id IS NOT NULL`;
+      where.memberships = {
+        some: { status: 'active', end_date: { gte: todayStr } },
+      };
     } else if (status === 'expired') {
-      query += search ? ' AND' : ' WHERE';
-      query += ` ms.membership_id IS NULL`;
+      where.memberships = {
+        none: { status: 'active', end_date: { gte: todayStr } },
+      };
     }
 
-    query += ' ORDER BY m.created_at DESC';
+    const memberRows = await prisma.member.findMany({
+      where,
+      include: {
+        memberships: {
+          where: { status: 'active', end_date: { gte: todayStr } },
+          orderBy: { end_date: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
 
-    const members = db.prepare(query).all(...params);
+    const members = memberRows.map((m) => {
+      const ms = m.memberships[0] || null;
+      const days_remaining = ms?.end_date
+        ? Math.floor(
+            (new Date(ms.end_date + 'T00:00:00').getTime() -
+              new Date(todayStr + 'T00:00:00').getTime()) /
+              86400000,
+          )
+        : null;
+      const { memberships: _, ...memberData } = m;
+      return {
+        ...memberData,
+        plan_type: ms?.plan_type ?? null,
+        membership_status: ms?.status ?? null,
+        start_date: ms?.start_date ?? null,
+        end_date: ms?.end_date ?? null,
+        days_remaining,
+      };
+    });
+
     return NextResponse.json({ members });
   } catch (error) {
     console.error(error);
@@ -45,17 +71,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const db = getDb();
     const body = await request.json();
     const {
       first_name, last_name, contact_no, address, birthdate,
       emergency_contact, card_uid, custom_card_id, image_path,
-      plan_type, start_date, amount, mop, notes
+      plan_type, start_date, amount, mop, notes,
     } = body;
 
     const now = new Date().toISOString();
-    
-    // Calculate end_date
+
     const start = new Date(start_date || new Date());
     let end: Date;
     let months_purchased = 1;
@@ -69,33 +93,47 @@ export async function POST(request: NextRequest) {
     const end_date = toDateString(end);
     const start_date_str = toDateString(start);
 
-    const memberResult = db.prepare(`
-      INSERT INTO members (first_name, last_name, contact_no, address, birthdate, 
-        emergency_contact, card_uid, custom_card_id, image_path, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(first_name, last_name, contact_no, address, birthdate,
-           emergency_contact, card_uid, custom_card_id, image_path, notes, now);
+    const result = await prisma.$transaction(async (tx) => {
+      const member = await tx.member.create({
+        data: {
+          first_name, last_name, contact_no, address, birthdate,
+          emergency_contact, card_uid, custom_card_id, image_path, notes,
+          created_at: now,
+        },
+      });
 
-    const member_id = memberResult.lastInsertRowid;
+      const membership = await tx.membership.create({
+        data: {
+          member_id: member.member_id,
+          plan_type,
+          start_date: start_date_str,
+          end_date,
+          months_purchased,
+          status: 'active',
+          created_at: now,
+        },
+      });
 
-    const membershipResult = db.prepare(`
-      INSERT INTO memberships (member_id, plan_type, start_date, end_date, months_purchased, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'active', ?)
-    `).run(member_id, plan_type, start_date_str, end_date, months_purchased, now);
+      if (amount) {
+        await tx.payment.create({
+          data: {
+            member_id: member.member_id,
+            membership_id: membership.membership_id,
+            amount: parseFloat(amount),
+            mop,
+            payment_date: now.split('T')[0],
+            notes: 'Initial registration',
+          },
+        });
+      }
 
-    const membership_id = membershipResult.lastInsertRowid;
+      return { member_id: member.member_id, membership_id: membership.membership_id };
+    });
 
-    if (amount) {
-      db.prepare(`
-        INSERT INTO payments (member_id, membership_id, amount, mop, payment_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(member_id, membership_id, amount, mop, now.split('T')[0], 'Initial registration');
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      member_id,
-      membership_id
+    return NextResponse.json({
+      success: true,
+      member_id: result.member_id,
+      membership_id: result.membership_id,
     }, { status: 201 });
   } catch (error: unknown) {
     console.error(error);

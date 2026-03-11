@@ -1,36 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = (page - 1) * limit;
 
-    const walkins = db.prepare(`
-      SELECT * FROM walkins ORDER BY payment_date DESC LIMIT ? OFFSET ?
-    `).all(limit, offset);
+    const walkins = await prisma.walkin.findMany({
+      orderBy: { payment_date: 'desc' },
+      take: limit,
+      skip: offset,
+    });
 
     const today = new Date().toISOString().split('T')[0];
     const month = today.slice(0, 7);
     const week = getWeekStart();
 
-    const todayStats = db.prepare(`
-      SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
-      FROM walkins WHERE payment_date = ?
-    `).get(today) as { count: number; total: number };
+    // Today stats
+    const todayWalkins = await prisma.walkin.findMany({
+      where: { payment_date: today },
+      select: { amount_paid: true },
+    });
+    const todayStats = {
+      count: todayWalkins.length,
+      total: todayWalkins.reduce((sum, w) => sum + (w.amount_paid || 0), 0),
+    };
 
-    const weekStats = db.prepare(`
-      SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
-      FROM walkins WHERE payment_date >= ?
-    `).get(week) as { count: number; total: number };
+    // Week stats
+    const weekWalkins = await prisma.walkin.findMany({
+      where: { payment_date: { gte: week } },
+      select: { amount_paid: true },
+    });
+    const weekStats = {
+      count: weekWalkins.length,
+      total: weekWalkins.reduce((sum, w) => sum + (w.amount_paid || 0), 0),
+    };
 
-    const monthStats = db.prepare(`
-      SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
-      FROM walkins WHERE strftime('%Y-%m', payment_date) = ?
-    `).get(month) as { count: number; total: number };
+    // Month stats
+    const monthWalkins = await prisma.walkin.findMany({
+      where: { payment_date: { startsWith: month } },
+      select: { amount_paid: true },
+    });
+    const monthStats = {
+      count: monthWalkins.length,
+      total: monthWalkins.reduce((sum, w) => sum + (w.amount_paid || 0), 0),
+    };
 
     return NextResponse.json({ walkins, todayStats, weekStats, monthStats });
   } catch (error) {
@@ -50,18 +66,21 @@ function getWeekStart(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const db = getDb();
     const body = await request.json();
     const { guest_name, amount_paid, payment_date, notes } = body;
 
     const date = payment_date || new Date().toISOString().split('T')[0];
 
-    const result = db.prepare(`
-      INSERT INTO walkins (guest_name, amount_paid, payment_date, notes)
-      VALUES (?, ?, ?, ?)
-    `).run(guest_name || 'Walk-in Guest', amount_paid || 0, date, notes);
+    const walkin = await prisma.walkin.create({
+      data: {
+        guest_name: guest_name || 'Walk-in Guest',
+        amount_paid: amount_paid ? parseFloat(amount_paid) : 0,
+        payment_date: date,
+        notes,
+      },
+    });
 
-    return NextResponse.json({ success: true, walkin_id: result.lastInsertRowid }, { status: 201 });
+    return NextResponse.json({ success: true, walkin_id: walkin.walkin_id }, { status: 201 });
   } catch (error: unknown) {
     console.error(error);
     const msg = error instanceof Error ? error.message : 'Failed to add walk-in';

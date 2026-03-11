@@ -1,48 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import ExcelJS from 'exceljs';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || '';
     const from = searchParams.get('from') || '';
     const to = searchParams.get('to') || '';
 
-    let query = `
-      SELECT l.*, m.first_name, m.last_name
-      FROM logs l
-      LEFT JOIN members m ON l.member_id = m.member_id
-      WHERE 1=1
-    `;
-    const params: string[] = [];
-
+    const timestampConditions: Record<string, string> = {};
     if (date) {
-      query += ` AND date(l.timestamp) = ?`;
-      params.push(date);
+      timestampConditions.startsWith = date;
     }
     if (from) {
-      query += ` AND date(l.timestamp) >= ?`;
-      params.push(from);
+      timestampConditions.gte = from;
     }
     if (to) {
-      query += ` AND date(l.timestamp) <= ?`;
-      params.push(to);
+      timestampConditions.lte = to + '\uffff';
     }
 
-    query += ` ORDER BY l.timestamp DESC`;
+    const where: Record<string, unknown> = {};
+    if (Object.keys(timestampConditions).length > 0) {
+      where.timestamp = timestampConditions;
+    }
 
-    const logs = db.prepare(query).all(...params) as {
-      log_id: number;
-      member_id: number;
-      first_name: string;
-      last_name: string;
-      card_uid: string;
-      action: string;
-      timestamp: string;
-      duration_seconds: number;
-    }[];
+    const logRows = await prisma.log.findMany({
+      where,
+      include: {
+        member: {
+          select: { first_name: true, last_name: true },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    const logs = logRows.map((l: typeof logRows[number]) => ({
+      log_id: l.log_id,
+      member_id: l.member_id,
+      first_name: l.member?.first_name ?? null,
+      last_name: l.member?.last_name ?? null,
+      card_uid: l.card_uid,
+      action: l.action,
+      timestamp: l.timestamp,
+      duration_seconds: l.duration_seconds,
+    }));
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';
