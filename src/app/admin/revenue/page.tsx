@@ -162,17 +162,17 @@ export default function RevenuePage() {
             </thead>
             <tbody>
               {(() => {
-                const isWalkin = (p: any) => (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
+                const isWalkin = (p: RevenueData['payments'][number]) => (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
                 const displayed = tab === 'all' ? data.payments : data.payments.filter(isWalkin);
                 return displayed.map((p) => {
-                const isWalkin = (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
+                  const isWalkinRow = (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
                 return (
-                <tr key={p.payment_id} className={`border-t border-gray-100 hover:bg-gray-50 ${isWalkin ? 'bg-purple-50' : ''}`}>
+                  <tr key={p.payment_id} className={`border-t border-gray-100 hover:bg-gray-50 ${isWalkinRow ? 'bg-purple-50' : ''}`}>
                   <td className="px-4 py-3 text-gray-600 text-sm">{p.payment_date}</td>
                   <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-3">
-                    {isWalkin && <span className="inline-block w-2 h-8 bg-purple-400 rounded-sm" />}
+                      {isWalkinRow && <span className="inline-block w-2 h-8 bg-purple-400 rounded-sm" />}
                     <span>{p.first_name} {p.last_name}</span>
-                    {isWalkin && <span className="ml-2 text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded">Walk-in</span>}
+                      {isWalkinRow && <span className="ml-2 text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded">Walk-in</span>}
                   </td>
                   <td className="px-4 py-3 capitalize text-gray-600 text-sm">{p.plan_type || '-'}</td>
                   <td className="px-4 py-3 font-bold text-green-600">₱{p.amount?.toLocaleString()}</td>
