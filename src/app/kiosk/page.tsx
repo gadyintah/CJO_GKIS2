@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import ScannerInput from '@/components/ScannerInput';
+import dynamic from 'next/dynamic';
+
+const LoginModal = dynamic(() => import('@/components/LoginModal'));
 
 interface ScanResult {
   found: boolean;
@@ -34,12 +37,32 @@ function formatDuration(seconds: number): string {
 }
 
 export default function KioskPage() {
+  const [loginOpen, setLoginOpen] = useState(false);
+  
   const [time, setTime] = useState(new Date());
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
+    // Prevent admin users from viewing kiosk: check server-side session cookie
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/session');
+        if (res.ok) {
+          const body = await res.json();
+          if (body?.authenticated) {
+            // If admin is authenticated, send them back to admin dashboard
+            window.location.replace('/admin/dashboard');
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+      }
+    })();
+
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -90,7 +113,7 @@ export default function KioskPage() {
         }} />
       </div>
 
-      <ScannerInput onScan={handleScan} disabled={scanning} />
+      <ScannerInput onScan={handleScan} disabled={scanning || loginOpen} />
 
       {!scanResult ? (
         <div className="text-center z-10 animate-fadeIn">
@@ -224,6 +247,18 @@ export default function KioskPage() {
           FITNESS · STRENGTH · COMMUNITY
         </div>
       )}
+
+      {/* Admin login trigger */}
+      <div className="absolute bottom-6 right-6">
+        <button
+          onClick={() => setLoginOpen(true)}
+          className="bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold shadow-lg"
+        >
+          Admin Login
+        </button>
+      </div>
+
+      <LoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
     </div>
   );
 }

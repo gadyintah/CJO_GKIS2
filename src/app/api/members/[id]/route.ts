@@ -1,43 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
     const { id } = await params;
+    const memberId = parseInt(id);
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    const member = db.prepare(`
-      SELECT m.*,
-        ms.membership_id, ms.plan_type, ms.status as membership_status,
-        ms.start_date, ms.end_date, ms.months_purchased,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
-      FROM members m
-      LEFT JOIN memberships ms ON m.member_id = ms.member_id
-        AND ms.status = 'active'
-        AND ms.end_date >= date('now')
-      WHERE m.member_id = ?
-    `).get(id);
+    const memberRow = await prisma.member.findUnique({
+      where: { member_id: memberId },
+    });
 
-    if (!member) {
+    if (!memberRow) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
 
-    const memberships = db.prepare(`
-      SELECT * FROM memberships WHERE member_id = ? ORDER BY created_at DESC
-    `).all(id);
+    const activeMembership = await prisma.membership.findFirst({
+      where: { member_id: memberId, status: 'active', end_date: { gte: todayStr } },
+      orderBy: { end_date: 'desc' },
+    });
 
-    const payments = db.prepare(`
-      SELECT p.*, ms.plan_type FROM payments p
-      LEFT JOIN memberships ms ON p.membership_id = ms.membership_id
-      WHERE p.member_id = ? ORDER BY p.payment_date DESC
-    `).all(id);
+    const days_remaining = activeMembership?.end_date
+      ? Math.floor(
+          (new Date(activeMembership.end_date + 'T00:00:00').getTime() -
+            new Date(todayStr + 'T00:00:00').getTime()) /
+            86400000,
+        )
+      : null;
 
-    const logs = db.prepare(`
-      SELECT * FROM logs WHERE member_id = ? ORDER BY timestamp DESC LIMIT 50
-    `).all(id);
+    const member = {
+      ...memberRow,
+      membership_id: activeMembership?.membership_id ?? null,
+      plan_type: activeMembership?.plan_type ?? null,
+      membership_status: activeMembership?.status ?? null,
+      start_date: activeMembership?.start_date ?? null,
+      end_date: activeMembership?.end_date ?? null,
+      months_purchased: activeMembership?.months_purchased ?? null,
+      days_remaining,
+    };
+
+    const memberships = await prisma.membership.findMany({
+      where: { member_id: memberId },
+      orderBy: { created_at: 'desc' },
+    });
+
+    const paymentRows = await prisma.payment.findMany({
+      where: { member_id: memberId },
+      include: {
+        membership: { select: { plan_type: true } },
+      },
+      orderBy: { payment_date: 'desc' },
+    });
+
+    const payments = paymentRows.map((p) => {
+      const { membership, ...rest } = p;
+      return { ...rest, plan_type: membership?.plan_type ?? null };
+    });
+
+    const logs = await prisma.log.findMany({
+      where: { member_id: memberId },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+    });
 
     return NextResponse.json({ member, memberships, payments, logs });
   } catch (error) {
@@ -51,22 +78,20 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const db = getDb();
     const { id } = await params;
     const body = await request.json();
     const {
       first_name, last_name, contact_no, address, birthdate,
-      emergency_contact, card_uid, custom_card_id, image_path, notes
+      emergency_contact, card_uid, custom_card_id, image_path, notes,
     } = body;
 
-    db.prepare(`
-      UPDATE members SET
-        first_name = ?, last_name = ?, contact_no = ?, address = ?,
-        birthdate = ?, emergency_contact = ?, card_uid = ?, 
-        custom_card_id = ?, image_path = ?, notes = ?
-      WHERE member_id = ?
-    `).run(first_name, last_name, contact_no, address, birthdate,
-           emergency_contact, card_uid, custom_card_id, image_path, notes, id);
+    await prisma.member.update({
+      where: { member_id: parseInt(id) },
+      data: {
+        first_name, last_name, contact_no, address, birthdate,
+        emergency_contact, card_uid, custom_card_id, image_path, notes,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

@@ -23,6 +23,7 @@ interface RevenueData {
 export default function RevenuePage() {
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'all' | 'walkins'>('all');
   const today = new Date().toISOString().split('T')[0];
   const month = today.slice(0, 7);
 
@@ -30,6 +31,7 @@ export default function RevenuePage() {
     const fetchData = async () => {
       try {
         const res = await fetch(`/api/revenue?date=${today}&month=${month}`);
+        if (!res.ok) throw new Error('Failed to fetch revenue data');
         const json = await res.json();
         setData(json);
       } catch (err) {
@@ -127,7 +129,23 @@ export default function RevenuePage() {
 
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-700">All Payments</h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-gray-700">Payments</h2>
+            <div className="bg-gray-50 rounded-full p-1 flex items-center text-sm">
+              <button
+                onClick={() => setTab('all')}
+                className={`px-3 py-1 rounded-full ${tab === 'all' ? 'bg-yellow-500 text-white' : 'text-gray-600'}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setTab('walkins')}
+                className={`ml-1 px-3 py-1 rounded-full ${tab === 'walkins' ? 'bg-purple-500 text-white' : 'text-gray-600'}`}
+              >
+                Walk-ins
+              </button>
+            </div>
+          </div>
           <span className="text-sm text-gray-400">{data.payments.length} records</span>
         </div>
         <div className="overflow-auto max-h-96">
@@ -143,16 +161,27 @@ export default function RevenuePage() {
               </tr>
             </thead>
             <tbody>
-              {data.payments.map((p) => (
-                <tr key={p.payment_id} className="border-t border-gray-100 hover:bg-gray-50">
+              {(() => {
+                const isWalkin = (p: RevenueData['payments'][number]) => (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
+                const displayed = tab === 'all' ? data.payments : data.payments.filter(isWalkin);
+                return displayed.map((p) => {
+                  const isWalkinRow = (p.plan_type === 'Walk-in' || p.mop === 'Walk-in');
+                return (
+                  <tr key={p.payment_id} className={`border-t border-gray-100 hover:bg-gray-50 ${isWalkinRow ? 'bg-purple-50' : ''}`}>
                   <td className="px-4 py-3 text-gray-600 text-sm">{p.payment_date}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{p.first_name} {p.last_name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-3">
+                      {isWalkinRow && <span className="inline-block w-2 h-8 bg-purple-400 rounded-sm" />}
+                    <span>{p.first_name} {p.last_name}</span>
+                      {isWalkinRow && <span className="ml-2 text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded">Walk-in</span>}
+                  </td>
                   <td className="px-4 py-3 capitalize text-gray-600 text-sm">{p.plan_type || '-'}</td>
                   <td className="px-4 py-3 font-bold text-green-600">₱{p.amount?.toLocaleString()}</td>
                   <td className="px-4 py-3 text-gray-600 text-sm">{p.mop}</td>
                   <td className="px-4 py-3 text-gray-500 text-sm">{p.notes}</td>
                 </tr>
-              ))}
+                );
+              });
+            })()}
               {data.payments.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No payments yet</td></tr>
               )}

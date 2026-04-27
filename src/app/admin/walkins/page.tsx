@@ -27,6 +27,7 @@ export default function WalkinsPage() {
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/walkins');
+      if (!res.ok) throw new Error('Failed to fetch walk-ins data');
       const json = await res.json();
       setData(json);
     } catch (err) {

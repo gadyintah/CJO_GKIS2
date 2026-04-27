@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
+
+function buildMemberWithMembership(
+  memberRow: Record<string, unknown>,
+  activeMembership: Record<string, unknown> | null,
+  todayStr: string,
+) {
+  const days_remaining = activeMembership?.end_date
+    ? Math.floor(
+        (new Date(activeMembership.end_date as string + 'T00:00:00').getTime() -
+          new Date(todayStr + 'T00:00:00').getTime()) /
+          86400000,
+      )
+    : null;
+
+  return {
+    ...memberRow,
+    membership_id: activeMembership?.membership_id ?? null,
+    plan_type: activeMembership?.plan_type ?? null,
+    membership_status: activeMembership?.status ?? null,
+    start_date: activeMembership?.start_date ?? null,
+    end_date: activeMembership?.end_date ?? null,
+    days_remaining,
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const db = getDb();
     const body = await request.json();
     const { card_uid } = body;
 
@@ -11,71 +34,75 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'card_uid required' }, { status: 400 });
     }
 
-    const member = db.prepare(`
-      SELECT m.*,
-        ms.membership_id, ms.plan_type, ms.status as membership_status,
-        ms.start_date, ms.end_date,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
-      FROM members m
-      LEFT JOIN memberships ms ON m.member_id = ms.member_id
-        AND ms.status = 'active' AND ms.end_date >= date('now')
-      WHERE m.card_uid = ?
-    `).get(card_uid) as Record<string, unknown> | undefined;
-
-    if (!member) {
-      return NextResponse.json({ 
-        found: false, 
-        message: 'Card not registered — Please see the front desk' 
-      });
-    }
-
     const now = new Date();
     const nowIso = now.toISOString();
     const today = nowIso.split('T')[0];
 
-    const existingCheckIn = db.prepare(`
-      SELECT * FROM logs
-      WHERE member_id = ? AND action = 'CHECK_IN'
-        AND date(timestamp) = ?
-        AND log_id NOT IN (
-          SELECT l2.log_id FROM logs l2
-          WHERE l2.member_id = ? AND l2.action = 'CHECK_IN'
-            AND date(l2.timestamp) = ?
-            AND EXISTS (
-              SELECT 1 FROM logs l3
-              WHERE l3.member_id = ? AND l3.action = 'CHECK_OUT'
-                AND l3.timestamp > l2.timestamp
-                AND date(l3.timestamp) = ?
-            )
-        )
-      ORDER BY timestamp DESC LIMIT 1
-    `).get(member.member_id, today, member.member_id, today, member.member_id, today) as Record<string, unknown> | undefined;
+    const memberRow = await prisma.member.findUnique({
+      where: { card_uid },
+    });
+
+    if (!memberRow) {
+      return NextResponse.json({
+        found: false,
+        message: 'Card not registered — Please see the front desk',
+      });
+    }
+
+    const activeMembership = await prisma.membership.findFirst({
+      where: { member_id: memberRow.member_id, status: 'active', end_date: { gte: today } },
+      orderBy: { end_date: 'desc' },
+    });
+
+    const member = buildMemberWithMembership(
+      memberRow as unknown as Record<string, unknown>,
+      activeMembership as unknown as Record<string, unknown> | null,
+      today,
+    );
+
+    // Find unmatched check-in today: a CHECK_IN with no subsequent CHECK_OUT
+    const todayCheckIns = await prisma.log.findMany({
+      where: { member_id: memberRow.member_id, action: 'CHECK_IN', timestamp: { startsWith: today } },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    const todayCheckOuts = await prisma.log.findMany({
+      where: { member_id: memberRow.member_id, action: 'CHECK_OUT', timestamp: { startsWith: today } },
+    });
+
+    let existingCheckIn: typeof todayCheckIns[0] | undefined;
+    for (const ci of todayCheckIns) {
+      const hasMatchingCheckOut = todayCheckOuts.some(
+        (co) => co.timestamp && ci.timestamp && co.timestamp > ci.timestamp,
+      );
+      if (!hasMatchingCheckOut) {
+        existingCheckIn = ci;
+        break;
+      }
+    }
 
     let action: string;
     let duration_seconds: number | null = null;
 
     if (!existingCheckIn) {
       action = 'CHECK_IN';
-      db.prepare(`
-        INSERT INTO logs (member_id, card_uid, action, timestamp, duration_seconds)
-        VALUES (?, ?, 'CHECK_IN', ?, NULL)
-      `).run(member.member_id, card_uid, nowIso);
+      await prisma.log.create({
+        data: { member_id: memberRow.member_id, card_uid, action: 'CHECK_IN', timestamp: nowIso, duration_seconds: null },
+      });
     } else {
       action = 'CHECK_OUT';
       const checkInTime = new Date(existingCheckIn.timestamp as string);
       duration_seconds = Math.floor((now.getTime() - checkInTime.getTime()) / 1000);
-      db.prepare(`
-        INSERT INTO logs (member_id, card_uid, action, timestamp, duration_seconds)
-        VALUES (?, ?, 'CHECK_OUT', ?, ?)
-      `).run(member.member_id, card_uid, nowIso, duration_seconds);
+      await prisma.log.create({
+        data: { member_id: memberRow.member_id, card_uid, action: 'CHECK_OUT', timestamp: nowIso, duration_seconds },
+      });
     }
 
-    const sessionCount = (db.prepare(`
-      SELECT COUNT(*) as count FROM logs
-      WHERE member_id = ? AND action = 'CHECK_IN' AND date(timestamp) = ?
-    `).get(member.member_id, today) as { count: number }).count;
+    const sessionCount = await prisma.log.count({
+      where: { member_id: memberRow.member_id, action: 'CHECK_IN', timestamp: { startsWith: today } },
+    });
 
-    const hasActiveMembership = !!member.membership_status;
+    const hasActiveMembership = !!activeMembership;
 
     return NextResponse.json({
       found: true,
@@ -85,7 +112,7 @@ export async function POST(request: NextRequest) {
       session_count_today: sessionCount,
       has_active_membership: hasActiveMembership,
       message: action === 'CHECK_IN' ? 'Welcome! Checked in successfully.' : 'Goodbye! Checked out successfully.',
-      timestamp: nowIso
+      timestamp: nowIso,
     });
   } catch (error) {
     console.error(error);
@@ -95,7 +122,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const card_uid = searchParams.get('card_uid') || '';
 
@@ -103,20 +129,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'card_uid required' }, { status: 400 });
     }
 
-    const member = db.prepare(`
-      SELECT m.*,
-        ms.membership_id, ms.plan_type, ms.status as membership_status,
-        ms.start_date, ms.end_date,
-        CAST((julianday(ms.end_date) - julianday('now')) AS INTEGER) as days_remaining
-      FROM members m
-      LEFT JOIN memberships ms ON m.member_id = ms.member_id
-        AND ms.status = 'active' AND ms.end_date >= date('now')
-      WHERE m.card_uid = ?
-    `).get(card_uid) as Record<string, unknown> | undefined;
+    const today = new Date().toISOString().split('T')[0];
 
-    if (!member) {
+    const memberRow = await prisma.member.findUnique({
+      where: { card_uid },
+    });
+
+    if (!memberRow) {
       return NextResponse.json({ found: false, message: 'Card not registered' });
     }
+
+    const activeMembership = await prisma.membership.findFirst({
+      where: { member_id: memberRow.member_id, status: 'active', end_date: { gte: today } },
+      orderBy: { end_date: 'desc' },
+    });
+
+    const member = buildMemberWithMembership(
+      memberRow as unknown as Record<string, unknown>,
+      activeMembership as unknown as Record<string, unknown> | null,
+      today,
+    );
 
     return NextResponse.json({ found: true, member });
   } catch (error) {

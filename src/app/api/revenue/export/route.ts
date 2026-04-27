@@ -1,54 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import ExcelJS from 'exceljs';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || '';
 
-    let paymentsQuery = `
-      SELECT p.*, m.first_name, m.last_name, ms.plan_type
-      FROM payments p
-      LEFT JOIN members m ON p.member_id = m.member_id
-      LEFT JOIN memberships ms ON p.membership_id = ms.membership_id
-    `;
-    const paymentsParams: string[] = [];
+    // Payments with member and membership info
+    const paymentWhere = month ? { payment_date: { startsWith: month } } : {};
 
-    if (month) {
-      paymentsQuery += ` WHERE strftime('%Y-%m', p.payment_date) = ?`;
-      paymentsParams.push(month);
-    }
-    paymentsQuery += ` ORDER BY p.payment_date DESC`;
+    const paymentRows = await prisma.payment.findMany({
+      where: paymentWhere,
+      include: {
+        member: { select: { first_name: true, last_name: true } },
+        membership: { select: { plan_type: true } },
+      },
+      orderBy: { payment_date: 'desc' },
+    });
 
-    const payments = db.prepare(paymentsQuery).all(...paymentsParams) as {
-      payment_id: number;
-      member_id: number;
-      first_name: string;
-      last_name: string;
-      amount: number;
-      mop: string;
-      payment_date: string;
-      notes: string;
-      plan_type: string;
-    }[];
+    const payments = paymentRows.map((p) => ({
+      payment_id: p.payment_id,
+      member_id: p.member_id,
+      first_name: p.member?.first_name ?? null,
+      last_name: p.member?.last_name ?? null,
+      amount: p.amount,
+      mop: p.mop,
+      payment_date: p.payment_date,
+      notes: p.notes,
+      plan_type: p.membership?.plan_type ?? null,
+    }));
 
-    let walkinsQuery = `SELECT * FROM walkins`;
-    const walkinsParams: string[] = [];
-    if (month) {
-      walkinsQuery += ` WHERE strftime('%Y-%m', payment_date) = ?`;
-      walkinsParams.push(month);
-    }
-    walkinsQuery += ` ORDER BY payment_date DESC`;
+    // Walk-ins
+    const walkinWhere = month ? { payment_date: { startsWith: month } } : {};
 
-    const walkins = db.prepare(walkinsQuery).all(...walkinsParams) as {
-      walkin_id: number;
-      guest_name: string;
-      amount_paid: number;
-      payment_date: string;
-      notes: string;
-    }[];
+    const walkins = await prisma.walkin.findMany({
+      where: walkinWhere,
+      orderBy: { payment_date: 'desc' },
+    });
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'CJO GYM';

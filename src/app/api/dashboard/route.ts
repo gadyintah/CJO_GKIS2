@@ -1,75 +1,122 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 
 export async function GET() {
   try {
-    const db = getDb();
     const today = new Date().toISOString().split('T')[0];
 
-    const checkedInToday = (db.prepare(`
-      SELECT COUNT(DISTINCT member_id) as count FROM logs
-      WHERE action = 'CHECK_IN' AND date(timestamp) = ?
-    `).get(today) as { count: number }).count;
+    const checkedInTodayGroups = await prisma.log.groupBy({
+      by: ['member_id'],
+      where: { action: 'CHECK_IN', timestamp: { startsWith: today } },
+    });
+    const checkedInToday = checkedInTodayGroups.length;
 
-    const walkinsToday = (db.prepare(`
-      SELECT COUNT(*) as count, COALESCE(SUM(amount_paid), 0) as total
-      FROM walkins WHERE payment_date = ?
-    `).get(today) as { count: number; total: number });
+    const walkinsTodayList = await prisma.walkin.findMany({
+      where: { payment_date: today },
+    });
+    const walkinsCount = walkinsTodayList.length;
+    const walkinTotal = walkinsTodayList.reduce((sum, w) => sum + (w.amount_paid || 0), 0);
 
-    const revenueToday = (db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM payments
-      WHERE payment_date = ?
-    `).get(today) as { total: number }).total;
+    const revenueTodayAgg = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: { payment_date: today },
+    });
+    const revenueToday = revenueTodayAgg._sum.amount || 0;
 
-    const totalRevenue = (revenueToday) + (walkinsToday.total || 0);
+    const totalRevenue = revenueToday + walkinTotal;
 
-    const activeMembers = (db.prepare(`
-      SELECT COUNT(*) as count FROM memberships
-      WHERE status = 'active' AND end_date >= date('now')
-    `).get() as { count: number }).count;
+    const activeMembers = await prisma.membership.count({
+      where: { status: 'active', end_date: { gte: today } },
+    });
 
-    const expiredMembers = (db.prepare(`
-      SELECT COUNT(DISTINCT m.member_id) as count
-      FROM members m
-      WHERE NOT EXISTS (
-        SELECT 1 FROM memberships ms
-        WHERE ms.member_id = m.member_id AND ms.status = 'active' AND ms.end_date >= date('now')
-      )
-    `).get() as { count: number }).count;
+    const totalMembers = await prisma.member.count();
+    const membersWithActive = await prisma.member.count({
+      where: {
+        memberships: {
+          some: { status: 'active', end_date: { gte: today } },
+        },
+      },
+    });
+    const expiredMembers = totalMembers - membersWithActive;
 
-    const weeklyAttendance = db.prepare(`
-      SELECT date(timestamp) as date, COUNT(DISTINCT member_id) as count
-      FROM logs WHERE action = 'CHECK_IN'
-        AND date(timestamp) >= date('now', '-6 days')
-      GROUP BY date(timestamp)
-      ORDER BY date
-    `).all();
+    // Weekly attendance: last 7 days
+    const sixDaysAgo = new Date();
+    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+    const sixDaysAgoStr = sixDaysAgo.toISOString().split('T')[0];
 
-    const monthlyRevenueSummary = db.prepare(`
-      SELECT strftime('%Y-%m', payment_date) as month, SUM(amount) as total
-      FROM payments
-      WHERE strftime('%Y-%m', payment_date) >= strftime('%Y-%m', date('now', '-5 months'))
-      GROUP BY month ORDER BY month
-    `).all();
+    const weeklyLogs = await prisma.log.findMany({
+      where: { action: 'CHECK_IN', timestamp: { gte: sixDaysAgoStr } },
+      select: { timestamp: true, member_id: true },
+    });
 
-    const recentActivity = db.prepare(`
-      SELECT l.*, m.first_name, m.last_name, m.image_path
-      FROM logs l
-      LEFT JOIN members m ON l.member_id = m.member_id
-      ORDER BY l.timestamp DESC LIMIT 10
-    `).all();
+    const weeklyMap = new Map<string, Set<number>>();
+    weeklyLogs.forEach((log) => {
+      if (log.timestamp && log.member_id) {
+        const date = log.timestamp.split('T')[0];
+        if (!weeklyMap.has(date)) weeklyMap.set(date, new Set());
+        weeklyMap.get(date)!.add(log.member_id);
+      }
+    });
+    const weeklyAttendance = Array.from(weeklyMap.entries())
+      .map(([date, members]) => ({ date, count: members.size }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Monthly revenue summary: last 6 months
+    const fiveMonthsAgo = new Date();
+    fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
+    const fiveMonthsAgoStr = fiveMonthsAgo.toISOString().slice(0, 7);
+
+    const allPaymentsForMonthly = await prisma.payment.findMany({
+      where: { payment_date: { gte: fiveMonthsAgoStr } },
+      select: { payment_date: true, amount: true },
+    });
+
+    const monthlyMap = new Map<string, number>();
+    allPaymentsForMonthly.forEach((p) => {
+      if (p.payment_date && p.amount) {
+        const month = p.payment_date.substring(0, 7);
+        if (month >= fiveMonthsAgoStr) {
+          monthlyMap.set(month, (monthlyMap.get(month) || 0) + p.amount);
+        }
+      }
+    });
+    const monthlyRevenueSummary = Array.from(monthlyMap.entries())
+      .map(([month, total]) => ({ month, total }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    const recentActivityLogs = await prisma.log.findMany({
+      orderBy: { timestamp: 'desc' },
+      take: 10,
+      include: {
+        member: {
+          select: { first_name: true, last_name: true, image_path: true },
+        },
+      },
+    });
+
+    const recentActivity = recentActivityLogs.map((l) => ({
+      log_id: l.log_id,
+      member_id: l.member_id,
+      card_uid: l.card_uid,
+      action: l.action,
+      timestamp: l.timestamp,
+      duration_seconds: l.duration_seconds,
+      first_name: l.member?.first_name ?? null,
+      last_name: l.member?.last_name ?? null,
+      image_path: l.member?.image_path ?? null,
+    }));
 
     return NextResponse.json({
       checkedInToday,
-      walkinsToday: walkinsToday.count,
-      walkinRevenue: walkinsToday.total || 0,
+      walkinsToday: walkinsCount,
+      walkinRevenue: walkinTotal,
       revenueToday: totalRevenue,
       membershipRevenueToday: revenueToday,
       activeMembers,
       expiredMembers,
       weeklyAttendance,
       monthlyRevenueSummary,
-      recentActivity
+      recentActivity,
     });
   } catch (error) {
     console.error(error);

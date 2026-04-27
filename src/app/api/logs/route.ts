@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    const db = getDb();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || '';
     const member_id = searchParams.get('member_id') || '';
@@ -11,38 +10,51 @@ export async function GET(request: NextRequest) {
     const from = searchParams.get('from') || '';
     const to = searchParams.get('to') || '';
 
-    let query = `
-      SELECT l.*, m.first_name, m.last_name, m.image_path
-      FROM logs l
-      LEFT JOIN members m ON l.member_id = m.member_id
-      WHERE 1=1
-    `;
-    const params: string[] = [];
-
+    const timestampConditions: Record<string, string> = {};
     if (date) {
-      query += ` AND date(l.timestamp) = ?`;
-      params.push(date);
+      timestampConditions.startsWith = date;
     }
     if (from) {
-      query += ` AND date(l.timestamp) >= ?`;
-      params.push(from);
+      timestampConditions.gte = from;
     }
     if (to) {
-      query += ` AND date(l.timestamp) <= ?`;
-      params.push(to);
+      timestampConditions.lte = to + 'T23:59:59.999Z';
+    }
+
+    const where: Record<string, unknown> = {};
+    if (Object.keys(timestampConditions).length > 0) {
+      where.timestamp = timestampConditions;
     }
     if (member_id) {
-      query += ` AND l.member_id = ?`;
-      params.push(member_id);
+      where.member_id = parseInt(member_id);
     }
     if (card_uid) {
-      query += ` AND l.card_uid LIKE ?`;
-      params.push(`%${card_uid}%`);
+      where.card_uid = { contains: card_uid, mode: 'insensitive' };
     }
 
-    query += ` ORDER BY l.timestamp DESC LIMIT 200`;
+    const logRows = await prisma.log.findMany({
+      where,
+      include: {
+        member: {
+          select: { first_name: true, last_name: true, image_path: true },
+        },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 200,
+    });
 
-    const logs = db.prepare(query).all(...params);
+    const logs = logRows.map((l: typeof logRows[number]) => ({
+      log_id: l.log_id,
+      member_id: l.member_id,
+      card_uid: l.card_uid,
+      action: l.action,
+      timestamp: l.timestamp,
+      duration_seconds: l.duration_seconds,
+      first_name: l.member?.first_name ?? null,
+      last_name: l.member?.last_name ?? null,
+      image_path: l.member?.image_path ?? null,
+    }));
+
     return NextResponse.json({ logs });
   } catch (error) {
     console.error(error);

@@ -1,0 +1,64 @@
+name: Set Vercel JWT_SECRET
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-jwt-secret:
+    runs-on: ubuntu-latest
+    outputs:
+      jwt: ${{ steps.gen.outputs.jwt }}
+    steps:
+      - name: Generate strong JWT secret
+        id: gen
+        run: |
+          # generate 32 bytes (64 hex chars)
+          JWT=$(openssl rand -hex 32)
+          echo "jwt=$JWT" >> $GITHUB_OUTPUT
+
+      - name: Ensure required secrets are set
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then echo "Missing VERCEL_TOKEN secret"; exit 1; fi
+          if [ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]; then echo "Missing VERCEL_PROJECT_ID secret"; exit 1; fi
+
+      - name: Create/Update `JWT_SECRET` in Vercel (Preview & Production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          NEW_SECRET: ${{ steps.gen.outputs.jwt }}
+        run: |
+          set -euo pipefail
+          echo "Setting JWT_SECRET on Vercel for project $PROJECT_ID"
+
+          # Ensure jq is available
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
+          fi
+
+          # Fetch existing env vars
+          ENVS_JSON=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v9/projects/$PROJECT_ID/env")
+
+          # Find any existing env entries with key JWT_SECRET
+          EXISTING_IDS=$(echo "$ENVS_JSON" | jq -r '.env[] | select(.key=="JWT_SECRET") | .id') || true
+
+          if [ -n "$(echo "$EXISTING_IDS" | tr -d '\n' )" ]; then
+            echo "Found existing JWT_SECRET entries; updating..."
+            echo "$EXISTING_IDS" | while read -r id; do
+              if [ -n "$id" ]; then
+                echo "Updating env id: $id"
+                curl -s -X PATCH "https://api.vercel.com/v9/projects/$PROJECT_ID/env/$id" \
+                  -H "Authorization: Bearer $VERCEL_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"value\": \"$NEW_SECRET\"}" >/dev/null
+              fi
+            done
+          else
+            echo "No existing JWT_SECRET found; creating new env var."
+            curl -s -X POST "https://api.vercel.com/v9/projects/$PROJECT_ID/env" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"key\":\"JWT_SECRET\",\"value\":\"$NEW_SECRET\",\"target\":[\"preview\",\"production\"]}" >/dev/null
+          fi
+
+      - name: Output
+        run: echo "JWT secret set in Vercel (not printed)."
