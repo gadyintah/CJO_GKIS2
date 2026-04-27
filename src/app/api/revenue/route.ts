@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       ? { month, total: monthlyWalkinsTotal, count: monthlyWalkinsList.length }
       : null;
 
-    // Recent payments with member info
+    // Recent payments with member info (membership payments)
     const paymentRows = await prisma.payment.findMany({
       include: {
         member: { select: { first_name: true, last_name: true } },
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       orderBy: { payment_date: 'desc' },
       take: 100,
     });
-    const payments = paymentRows.map((p) => {
+    const membershipPayments = paymentRows.map((p) => {
       const { member, membership, ...rest } = p;
       return {
         ...rest,
@@ -62,11 +62,44 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Recent walk-in payments
+    const walkinRows = await prisma.walkin.findMany({
+      orderBy: { payment_date: 'desc' },
+      take: 100,
+    });
+    const walkinPayments = walkinRows.map((w) => ({
+      // use negative id to avoid collision with membership payment ids
+      payment_id: -(w.walkin_id),
+      first_name: w.guest_name ?? 'Walk-in',
+      last_name: '',
+      amount: w.amount_paid ?? 0,
+      mop: 'Walk-in',
+      payment_date: w.payment_date,
+      notes: w.notes,
+      plan_type: 'Walk-in',
+    }));
+
+    // Combine and sort by date desc, limit to 100
+    const combined = [...membershipPayments, ...walkinPayments].sort((a, b) => {
+      const da = a.payment_date || '';
+      const db = b.payment_date || '';
+      return db.localeCompare(da);
+    }).slice(0, 100);
+    const payments = combined;
+
     // Monthly breakdown (last 12 months)
-    const allPaymentsForBreakdown = await prisma.payment.findMany({
+    // Monthly breakdown should include both membership payments and walkins
+    const allPaymentsForBreakdown = [] as { payment_date: string | null; amount: number | null }[];
+    const membForBreakdown = await prisma.payment.findMany({
       where: { payment_date: { not: null } },
       select: { payment_date: true, amount: true },
     });
+    const walkinForBreakdown = await prisma.walkin.findMany({
+      where: { payment_date: { not: null } },
+      select: { payment_date: true, amount_paid: true },
+    });
+    allPaymentsForBreakdown.push(...membForBreakdown.map(p => ({ payment_date: p.payment_date, amount: p.amount })));
+    allPaymentsForBreakdown.push(...walkinForBreakdown.map(w => ({ payment_date: w.payment_date, amount: w.amount_paid })));
     const breakdownMap = new Map<string, number>();
     allPaymentsForBreakdown.forEach((p) => {
       if (p.payment_date && p.amount) {

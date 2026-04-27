@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
@@ -17,6 +17,20 @@ const navItems = [
 export default function AdminSidebar() {
   const pathname = usePathname();
 
+  const router = useRouter();
+
+  const handleKioskClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      // call logout endpoint to clear any server session cookie
+      await fetch('/api/admin/logout', { method: 'POST' });
+      } catch {
+        // ignore errors, still navigate
+    }
+    // Replace history entry so Back doesn't return to admin
+    router.replace('/kiosk');
+  };
+
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
       <div className="p-6 border-b border-gray-700">
@@ -31,17 +45,32 @@ export default function AdminSidebar() {
                !(item.href === '/admin/members' && pathname.startsWith('/admin/members/register')));
             return (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-yellow-500 text-gray-900 font-semibold'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
+                {item.href === '/kiosk' ? (
+                  <a
+                    href="/kiosk"
+                    onClick={handleKioskClick}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-yellow-500 text-gray-900 font-semibold'
+                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </a>
+                ) : (
+                  <Link
+                    href={item.href}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-yellow-500 text-gray-900 font-semibold'
+                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                )}
               </li>
             );
           })}
